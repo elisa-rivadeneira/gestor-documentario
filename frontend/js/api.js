@@ -3,7 +3,8 @@
  * Maneja todas las comunicaciones con el backend FastAPI
  */
 
-const API_BASE = 'http://localhost:8000/api';
+// Detectar automáticamente la URL del API (funciona en local y producción)
+const API_BASE = window.location.origin + '/api';
 
 /**
  * Clase para manejar errores de la API

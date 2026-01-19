@@ -10,6 +10,7 @@ from typing import Optional, List
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 import pdfplumber
@@ -462,6 +463,27 @@ def eliminar_adjunto(adjunto_id: int, db: Session = Depends(get_db)):
 def health_check():
     """Verificar estado del servidor"""
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+# ============================================
+# SERVIR FRONTEND
+# ============================================
+
+# Directorio del frontend
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+
+# Montar archivos estáticos del frontend (CSS, JS)
+if os.path.exists(FRONTEND_DIR):
+    app.mount("/css", StaticFiles(directory=os.path.join(FRONTEND_DIR, "css")), name="css")
+    app.mount("/js", StaticFiles(directory=os.path.join(FRONTEND_DIR, "js")), name="js")
+
+@app.get("/")
+async def serve_frontend():
+    """Servir el frontend"""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "Frontend no encontrado", "api_docs": "/docs"}
 
 
 # ============================================

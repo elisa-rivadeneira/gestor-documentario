@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Correspondencia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-blue-800 text-white shadow-lg">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-2xl font-bold cursor-pointer" onclick="mostrarBandeja()">
+                    Sistema de Correspondencia
+                </h1>
+                <button onclick="mostrarFormularioNuevo()"
+                        class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium transition">
+                    + Nuevo Documento
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="container mx-auto px-4 py-6">
+        <!-- Vista: Bandeja Principal -->
+        <div id="vista-bandeja" class="vista">
+            <!-- Filtros -->
+            <div class="bg-white rounded-lg shadow p-4 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                        <select id="filtro-tipo" onchange="cargarDocumentos()"
+                                class="w-full border rounded-lg px-3 py-2">
+                            <option value="">Todos</option>
+                            <option value="oficio">Oficios</option>
+                            <option value="carta">Cartas</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+                        <select id="filtro-direccion" onchange="cargarDocumentos()"
+                                class="w-full border rounded-lg px-3 py-2">
+                            <option value="">Todas</option>
+                            <option value="recibido">Recibidos</option>
+                            <option value="enviado">Enviados</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+                        <input type="text" id="filtro-busqueda"
+                               placeholder="Buscar por título, asunto, remitente..."
+                               onkeyup="debounce(cargarDocumentos, 300)()"
+                               class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Documentos -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <div class="p-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-800">Bandeja de Correspondencia</h2>
+                    <p id="total-docs" class="text-sm text-gray-500">Cargando...</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRO</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OFICIO</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FECHA ENVÍO</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ASUNTO</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RESUMEN</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-documentos" class="divide-y">
+                            <!-- Documentos se cargan aquí -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Paginación -->
+                <div id="paginacion" class="p-4 border-t flex justify-center gap-2">
+                </div>
+            </div>
+        </div>
+
+        <!-- Vista: Formulario Nuevo/Editar -->
+        <div id="vista-formulario" class="vista hidden">
+            <div class="bg-white rounded-lg shadow p-6 max-w-3xl mx-auto">
+                <h2 id="form-titulo" class="text-xl font-bold text-gray-800 mb-6">Nuevo Documento</h2>
+
+                <form id="form-documento" onsubmit="guardarDocumento(event)">
+                    <input type="hidden" id="doc-id">
+
+                    <!-- PASO 1: Tipo de Documento -->
+                    <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <h3 class="font-medium text-blue-800 mb-3">Paso 1: Selecciona el tipo</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Tipo de Documento *
+                                </label>
+                                <select id="doc-tipo" required class="w-full border rounded-lg px-3 py-2" onchange="onTipoDocumentoChange()">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="oficio">Oficio</option>
+                                    <option value="carta">Carta</option>
+                                </select>
+                            </div>
+                            <div id="direccion-container">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Dirección *
+                                </label>
+                                <select id="doc-direccion" required class="w-full border rounded-lg px-3 py-2">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="recibido">Recibido</option>
+                                    <option value="enviado">Enviado</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PASO 2: Subir PDF y Analizar -->
+                    <div class="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                        <h3 class="font-medium text-purple-800 mb-3">Paso 2: Sube el documento y analiza con IA</h3>
+
+                        <!-- Subir Archivo -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Documento PDF *
+                            </label>
+                            <div class="flex gap-2">
+                                <input type="file" id="doc-archivo" accept=".pdf"
+                                       class="flex-1 border rounded-lg px-3 py-2 bg-white">
+                                <button type="button" onclick="subirArchivo()"
+                                        class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg">
+                                    Subir
+                                </button>
+                            </div>
+                            <p id="archivo-status" class="text-sm text-gray-500 mt-1"></p>
+                        </div>
+
+                        <!-- Enlace Drive (opcional) -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                O enlace de Google Drive
+                            </label>
+                            <input type="url" id="doc-enlace"
+                                   placeholder="https://drive.google.com/..."
+                                   class="w-full border rounded-lg px-3 py-2 bg-white">
+                        </div>
+
+                        <!-- Botón Analizar -->
+                        <div class="flex items-center justify-between">
+                            <p class="text-sm text-purple-600">
+                                La IA extraerá automáticamente todos los datos del documento.
+                            </p>
+                            <button type="button" onclick="analizarConIA()"
+                                    id="btn-analizar"
+                                    class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                </svg>
+                                Analizar con IA
+                            </button>
+                        </div>
+                        <div id="ia-loading" class="hidden mt-2 text-purple-600">
+                            <span class="animate-pulse">Analizando documento...</span>
+                        </div>
+                        <div id="ia-error" class="hidden mt-2 text-red-600 text-sm"></div>
+                    </div>
+
+                    <!-- PASO 3: Datos extraídos por IA (editables) -->
+                    <div id="campos-ia" class="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                        <h3 class="font-medium text-green-800 mb-3">Paso 3: Revisa los datos extraídos</h3>
+                        <p class="text-sm text-green-600 mb-4">Estos campos se llenan automáticamente. Puedes editarlos si es necesario.</p>
+
+                        <!-- Número de Oficio y Fecha -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Número de Oficio
+                                    <span class="text-green-600 text-xs">(IA)</span>
+                                </label>
+                                <input type="text" id="doc-numero"
+                                       placeholder="Se llenará automáticamente"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Fecha del Documento
+                                    <span class="text-green-600 text-xs">(IA)</span>
+                                </label>
+                                <input type="date" id="doc-fecha" class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                        </div>
+
+                        <!-- Remitente y Destinatario -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Remitente (quien firma)
+                                    <span class="text-green-600 text-xs">(IA)</span>
+                                </label>
+                                <input type="text" id="doc-remitente"
+                                       placeholder="Se llenará automáticamente"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Destinatario
+                                    <span class="text-green-600 text-xs">(IA)</span>
+                                </label>
+                                <input type="text" id="doc-destinatario"
+                                       placeholder="Se llenará automáticamente"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                        </div>
+
+                        <!-- Asunto -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Asunto
+                                <span class="text-green-600 text-xs">(IA)</span>
+                            </label>
+                            <input type="text" id="doc-asunto"
+                                   placeholder="Se llenará automáticamente"
+                                   class="w-full border rounded-lg px-3 py-2 bg-white">
+                        </div>
+
+                        <!-- Resumen -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Resumen
+                                <span class="text-green-600 text-xs">(IA)</span>
+                            </label>
+                            <textarea id="doc-resumen" rows="3"
+                                      placeholder="Se llenará automáticamente"
+                                      class="w-full border rounded-lg px-3 py-2 bg-white"></textarea>
+                        </div>
+
+                        <!-- Mensaje WhatsApp -->
+                        <div id="whatsapp-container" class="hidden">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Mensaje para WhatsApp
+                                <span class="text-green-600 text-xs">(IA)</span>
+                            </label>
+                            <div class="relative">
+                                <textarea id="doc-whatsapp" rows="4" readonly
+                                          class="w-full border rounded-lg px-3 py-2 bg-gray-50 text-gray-700"></textarea>
+                                <button type="button" onclick="copiarWhatsApp()"
+                                        class="absolute top-2 right-2 bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+                                    </svg>
+                                    Copiar
+                                </button>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Mensaje listo para compartir por WhatsApp</p>
+                        </div>
+                    </div>
+
+                    <!-- Campo oculto para título (usamos numero como título) -->
+                    <input type="hidden" id="doc-titulo">
+
+                    <!-- Documento Padre (para respuestas) - oculto por defecto -->
+                    <div id="seccion-padre" class="mb-4 hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            En respuesta a
+                        </label>
+                        <select id="doc-padre" class="w-full border rounded-lg px-3 py-2">
+                            <option value="">Ninguno (documento nuevo)</option>
+                        </select>
+                    </div>
+
+                    <!-- Botones de acción -->
+                    <div class="flex gap-4">
+                        <button type="submit"
+                                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition">
+                            Guardar Documento
+                        </button>
+                        <button type="button" onclick="mostrarBandeja()"
+                                class="px-6 bg-gray-300 hover:bg-gray-400 text-gray-800 py-3 rounded-lg font-medium transition">
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Vista: Detalle de Documento -->
+        <div id="vista-detalle" class="vista hidden">
+            <div class="max-w-3xl mx-auto">
+                <!-- Cabecera -->
+                <div class="bg-white rounded-lg shadow p-6 mb-4">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <span id="det-badge" class="inline-block px-3 py-1 rounded-full text-sm font-medium mb-2">
+                            </span>
+                            <h2 id="det-titulo" class="text-2xl font-bold text-gray-800"></h2>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="editarDocumento()"
+                                    class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg">
+                                Editar
+                            </button>
+                            <button onclick="eliminarDocumento()"
+                                    class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg">
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <span class="text-gray-500">Número:</span>
+                            <p id="det-numero" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Fecha:</span>
+                            <p id="det-fecha" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Remitente:</span>
+                            <p id="det-remitente" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Destinatario:</span>
+                            <p id="det-destinatario" class="font-medium"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Asunto y Resumen -->
+                <div class="bg-white rounded-lg shadow p-6 mb-4">
+                    <h3 class="font-semibold text-gray-700 mb-2">Asunto</h3>
+                    <p id="det-asunto" class="text-gray-800 mb-4"></p>
+
+                    <h3 class="font-semibold text-gray-700 mb-2">Resumen</h3>
+                    <p id="det-resumen" class="text-gray-800 whitespace-pre-line"></p>
+                </div>
+
+                <!-- Archivos -->
+                <div class="bg-white rounded-lg shadow p-6 mb-4">
+                    <h3 class="font-semibold text-gray-700 mb-3">Documento Principal</h3>
+                    <div id="det-archivo" class="mb-4"></div>
+
+                    <h3 class="font-semibold text-gray-700 mb-3">Adjuntos</h3>
+                    <div id="det-adjuntos"></div>
+                </div>
+
+                <!-- Respuestas (solo para documentos recibidos) -->
+                <div id="seccion-respuestas" class="bg-white rounded-lg shadow p-6 mb-4 hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold text-gray-700">Cartas de Respuesta</h3>
+                        <button onclick="crearRespuesta()"
+                                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">
+                            + Nueva Respuesta
+                        </button>
+                    </div>
+                    <div id="lista-respuestas"></div>
+                </div>
+
+                <!-- Botón volver -->
+                <button onclick="mostrarBandeja()"
+                        class="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 py-3 rounded-lg font-medium transition">
+                    Volver a la Bandeja
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast para notificaciones -->
+    <div id="toast" class="fixed bottom-4 right-4 hidden">
+        <div class="bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg">
+            <span id="toast-message"></span>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

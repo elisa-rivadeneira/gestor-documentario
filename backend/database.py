@@ -7,8 +7,11 @@ from sqlalchemy.orm import sessionmaker
 import os
 
 # Ruta de la base de datos
+# En producción (Easypanel): usa DATABASE_PATH=/app/gestion_documentaria.db
+# En local: usa la ruta por defecto
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'correspondencia.db')}"
+DATABASE_PATH = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'gestion_documentaria.db'))
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
 # Crear engine de SQLAlchemy
 engine = create_engine(

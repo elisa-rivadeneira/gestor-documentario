@@ -9,7 +9,7 @@ ENV/
 .env
 
 # Database
-*.db
+# *.db (temporalmente comentado para subida inicial)
 *.sqlite3
 
 # Uploads (archivos subidos por usuarios)

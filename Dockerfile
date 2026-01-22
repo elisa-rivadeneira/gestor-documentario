@@ -23,9 +23,6 @@ COPY backend/ ./backend/
 # Copiar frontend
 COPY frontend/ ./frontend/
 
-# Copiar base de datos
-COPY correspondencia.db ./correspondencia.db
-
 # Crear directorio de uploads
 RUN mkdir -p /app/uploads
 

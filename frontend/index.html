@@ -27,35 +27,33 @@
     <main class="container mx-auto px-4 py-6">
         <!-- Vista: Bandeja Principal -->
         <div id="vista-bandeja" class="vista">
-            <!-- Filtros -->
+            <!-- Menú de Navegación -->
             <div class="bg-white rounded-lg shadow p-4 mb-6">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                        <select id="filtro-tipo" onchange="cargarDocumentos()"
-                                class="w-full border rounded-lg px-3 py-2">
-                            <option value="">Todos</option>
-                            <option value="oficio">Oficios</option>
-                            <option value="carta">Cartas</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
-                        <select id="filtro-direccion" onchange="cargarDocumentos()"
-                                class="w-full border rounded-lg px-3 py-2">
-                            <option value="">Todas</option>
-                            <option value="recibido">Recibidos</option>
-                            <option value="enviado">Enviados</option>
-                        </select>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
-                        <input type="text" id="filtro-busqueda"
-                               placeholder="Buscar por título, asunto, remitente..."
-                               onkeyup="debounce(cargarDocumentos, 300)()"
-                               class="w-full border rounded-lg px-3 py-2">
-                    </div>
+                <!-- Botones de categoría -->
+                <div class="flex flex-wrap gap-3 mb-4">
+                    <button id="btn-cartas-nemaec" onclick="filtrarPorCategoria('cartas-nemaec')"
+                            class="menu-btn menu-btn-nemaec flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition text-center">
+                        CARTAS NEMAEC
+                    </button>
+                    <button id="btn-oficios" onclick="filtrarPorCategoria('oficios')"
+                            class="menu-btn menu-btn-oficios flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition text-center">
+                        OFICIOS
+                    </button>
+                    <button id="btn-cartas-recibidas" onclick="filtrarPorCategoria('cartas-recibidas')"
+                            class="menu-btn menu-btn-recibidas flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition text-center">
+                        CARTAS RECIBIDAS
+                    </button>
                 </div>
+                <!-- Barra de búsqueda -->
+                <div>
+                    <input type="text" id="filtro-busqueda"
+                           placeholder="Buscar por número, asunto, remitente..."
+                           onkeyup="debounce(cargarDocumentos, 300)()"
+                           class="w-full border rounded-lg px-3 py-2">
+                </div>
+                <!-- Campos ocultos para filtros -->
+                <input type="hidden" id="filtro-tipo" value="oficio">
+                <input type="hidden" id="filtro-direccion" value="">
             </div>
 
             <!-- Lista de Documentos -->
@@ -113,7 +111,7 @@
                                 <label class="block text-sm font-medium text-gray-700 mb-1">
                                     Dirección *
                                 </label>
-                                <select id="doc-direccion" required class="w-full border rounded-lg px-3 py-2">
+                                <select id="doc-direccion" required class="w-full border rounded-lg px-3 py-2" onchange="onDireccionChange()">
                                     <option value="">Seleccionar...</option>
                                     <option value="recibido">Recibido</option>
                                     <option value="enviado">Enviado</option>
@@ -229,6 +227,21 @@
                             <input type="text" id="doc-asunto"
                                    placeholder="Se llenará automáticamente"
                                    class="w-full border rounded-lg px-3 py-2 bg-white">
+                        </div>
+
+                        <!-- Oficio de Referencia (para cartas) -->
+                        <div id="oficio-referencia-container" class="mb-4 hidden">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                En respuesta al Oficio
+                                <span class="text-green-600 text-xs">(IA)</span>
+                            </label>
+                            <select id="doc-oficio-referencia" onchange="onOficioReferenciaChange()"
+                                    class="w-full border rounded-lg px-3 py-2 bg-white">
+                                <option value="">-- Sin oficio de referencia --</option>
+                            </select>
+                            <div id="oficio-referencia-asunto" class="mt-2 p-2 bg-blue-50 rounded text-sm text-blue-800 hidden">
+                                <strong>Asunto del oficio:</strong> <span id="oficio-ref-asunto-texto"></span>
+                            </div>
                         </div>
 
                         <!-- Resumen -->

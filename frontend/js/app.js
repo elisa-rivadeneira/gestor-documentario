@@ -11,7 +11,9 @@ let state = {
     documentoActual: null,
     archivoTemporal: null,
     paginaActual: 1,
-    editando: false
+    editando: false,
+    categoriaActual: 'oficios', // Por defecto: oficios
+    oficiosDisponibles: [] // Lista de oficios para el dropdown de referencia
 };
 
 // ============================================
@@ -19,8 +21,61 @@ let state = {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    cargarDocumentos();
+    // Inicializar con "oficios" seleccionado por defecto
+    filtrarPorCategoria('oficios');
 });
+
+// ============================================
+// NAVEGACIÓN POR CATEGORÍAS
+// ============================================
+
+function filtrarPorCategoria(categoria) {
+    state.categoriaActual = categoria;
+    state.paginaActual = 1;
+
+    // Configurar filtros según la categoría
+    const filtroTipo = document.getElementById('filtro-tipo');
+    const filtroDireccion = document.getElementById('filtro-direccion');
+
+    switch (categoria) {
+        case 'cartas-nemaec':
+            // Cartas enviadas (NEMAEC)
+            filtroTipo.value = 'carta';
+            filtroDireccion.value = 'enviado';
+            break;
+        case 'oficios':
+            // Todos los oficios
+            filtroTipo.value = 'oficio';
+            filtroDireccion.value = '';
+            break;
+        case 'cartas-recibidas':
+            // Cartas recibidas
+            filtroTipo.value = 'carta';
+            filtroDireccion.value = 'recibido';
+            break;
+    }
+
+    // Actualizar estilos de botones activos
+    actualizarBotonesMenu(categoria);
+
+    // Cargar documentos con los nuevos filtros
+    cargarDocumentos();
+}
+
+function actualizarBotonesMenu(categoriaActiva) {
+    const botones = ['cartas-nemaec', 'oficios', 'cartas-recibidas'];
+
+    botones.forEach(cat => {
+        const btn = document.getElementById(`btn-${cat}`);
+        if (btn) {
+            if (cat === categoriaActiva) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
+}
 
 // ============================================
 // NAVEGACIÓN ENTRE VISTAS
@@ -54,15 +109,121 @@ function onTipoDocumentoChange() {
     const tipo = document.getElementById('doc-tipo').value;
     const direccionContainer = document.getElementById('direccion-container');
     const direccionSelect = document.getElementById('doc-direccion');
+    const oficioRefContainer = document.getElementById('oficio-referencia-container');
 
     if (tipo === 'oficio') {
         // Para oficios, auto-seleccionar "recibido" y ocultar el campo
         direccionSelect.value = 'recibido';
         direccionContainer.classList.add('hidden');
+        oficioRefContainer.classList.add('hidden');
     } else {
         // Para cartas, mostrar el campo de dirección
         direccionContainer.classList.remove('hidden');
+        // Cargar oficios para el campo de referencia
+        cargarOficiosParaReferencia();
     }
+}
+
+function onDireccionChange() {
+    const tipo = document.getElementById('doc-tipo').value;
+    const direccion = document.getElementById('doc-direccion').value;
+    const oficioRefContainer = document.getElementById('oficio-referencia-container');
+
+    // Mostrar campo de referencia solo para cartas enviadas (NEMAEC)
+    if (tipo === 'carta' && direccion === 'enviado') {
+        oficioRefContainer.classList.remove('hidden');
+        cargarOficiosParaReferencia();
+    } else {
+        oficioRefContainer.classList.add('hidden');
+    }
+}
+
+async function cargarOficiosParaReferencia() {
+    try {
+        // Cargar todos los oficios (recibidos y enviados) para referencia
+        const data = await apiListarDocumentos({ tipo_documento: 'oficio', por_pagina: 100 });
+        state.oficiosDisponibles = data.documentos;
+
+        const select = document.getElementById('doc-oficio-referencia');
+        select.innerHTML = '<option value="">-- Sin oficio de referencia --</option>';
+
+        data.documentos.forEach(doc => {
+            const option = document.createElement('option');
+            option.value = doc.id;
+            option.textContent = doc.numero || `ID: ${doc.id}`;
+            option.dataset.asunto = doc.asunto || '';
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error al cargar oficios para referencia:', error);
+    }
+}
+
+function onOficioReferenciaChange() {
+    const select = document.getElementById('doc-oficio-referencia');
+    const asuntoContainer = document.getElementById('oficio-referencia-asunto');
+    const asuntoTexto = document.getElementById('oficio-ref-asunto-texto');
+
+    if (select.value) {
+        const selectedOption = select.options[select.selectedIndex];
+        const asunto = selectedOption.dataset.asunto;
+
+        if (asunto) {
+            asuntoTexto.textContent = asunto;
+            asuntoContainer.classList.remove('hidden');
+        } else {
+            asuntoContainer.classList.add('hidden');
+        }
+    } else {
+        asuntoContainer.classList.add('hidden');
+    }
+}
+
+function seleccionarOficioPorNumero(numeroOficio) {
+    if (!numeroOficio) return false;
+
+    const select = document.getElementById('doc-oficio-referencia');
+    const numeroNormalizado = numeroOficio.toUpperCase().replace(/\s+/g, '');
+
+    console.log('Buscando oficio de referencia:', numeroOficio);
+
+    // Extraer el número correlativo y año del oficio buscado
+    const matchBuscado = numeroOficio.match(/(\d{5,6})-(\d{4})/);
+    if (!matchBuscado) {
+        console.log('No se pudo extraer correlativo del oficio:', numeroOficio);
+        return false;
+    }
+
+    const correlativoBuscado = matchBuscado[1];
+    const anioBuscado = matchBuscado[2];
+    console.log('Buscando correlativo:', correlativoBuscado, 'año:', anioBuscado);
+
+    // Buscar en las opciones
+    for (let i = 0; i < select.options.length; i++) {
+        const optionText = select.options[i].textContent.toUpperCase();
+
+        // Buscar por correlativo y año
+        if (optionText.includes(correlativoBuscado) && optionText.includes(anioBuscado)) {
+            console.log('Encontrado:', optionText);
+            select.value = select.options[i].value;
+            onOficioReferenciaChange();
+            return true;
+        }
+    }
+
+    // Si no encontró con año, buscar solo por correlativo
+    for (let i = 0; i < select.options.length; i++) {
+        const optionText = select.options[i].textContent;
+        if (optionText.includes(correlativoBuscado)) {
+            console.log('Encontrado por correlativo:', optionText);
+            select.value = select.options[i].value;
+            onOficioReferenciaChange();
+            return true;
+        }
+    }
+
+    console.log('No se encontró el oficio en la lista');
+    return false;
 }
 
 // ============================================
@@ -309,6 +470,10 @@ function limpiarFormulario() {
     document.getElementById('ia-error').classList.add('hidden');
     document.getElementById('doc-whatsapp').value = '';
     document.getElementById('whatsapp-container').classList.add('hidden');
+    // Limpiar campo de oficio de referencia
+    document.getElementById('doc-oficio-referencia').value = '';
+    document.getElementById('oficio-referencia-container').classList.add('hidden');
+    document.getElementById('oficio-referencia-asunto').classList.add('hidden');
     state.archivoTemporal = null;
 }
 
@@ -370,6 +535,11 @@ async function guardarDocumento(event) {
 
     const docId = document.getElementById('doc-id').value;
     const numeroOficio = document.getElementById('doc-numero').value || null;
+
+    // Determinar documento padre: primero el oficio de referencia, luego el campo padre tradicional
+    let documentoPadreId = document.getElementById('doc-oficio-referencia').value ||
+                           document.getElementById('doc-padre').value || null;
+
     const documento = {
         tipo_documento: document.getElementById('doc-tipo').value,
         direccion: document.getElementById('doc-direccion').value,
@@ -381,7 +551,7 @@ async function guardarDocumento(event) {
         asunto: document.getElementById('doc-asunto').value || null,
         resumen: document.getElementById('doc-resumen').value || null,
         enlace_drive: document.getElementById('doc-enlace').value || null,
-        documento_padre_id: document.getElementById('doc-padre').value || null
+        documento_padre_id: documentoPadreId
     };
 
     try {
@@ -530,10 +700,26 @@ async function analizarConIA() {
                 document.getElementById('whatsapp-container').classList.remove('hidden');
             }
 
-            // Auto-seleccionar tipo oficio si se detectó número de oficio
-            if (resultado.numero_oficio && resultado.numero_oficio.toLowerCase().includes('oficio')) {
-                document.getElementById('doc-tipo').value = 'oficio';
-                onTipoDocumentoChange();
+            // Auto-seleccionar tipo basado en el número detectado
+            if (resultado.numero_oficio) {
+                if (resultado.numero_oficio.toLowerCase().includes('oficio')) {
+                    document.getElementById('doc-tipo').value = 'oficio';
+                    onTipoDocumentoChange();
+                } else if (resultado.numero_oficio.toLowerCase().includes('carta')) {
+                    document.getElementById('doc-tipo').value = 'carta';
+                    document.getElementById('doc-direccion').value = 'enviado';
+                    onTipoDocumentoChange();
+                    onDireccionChange();
+                }
+            }
+
+            // Si la IA detectó un oficio de referencia, intentar seleccionarlo
+            if (resultado.oficio_referencia) {
+                console.log('Oficio de referencia detectado por IA:', resultado.oficio_referencia);
+                // Esperar a que se carguen los oficios y luego seleccionar
+                setTimeout(() => {
+                    seleccionarOficioPorNumero(resultado.oficio_referencia);
+                }, 500);
             }
 
             mostrarToast('Análisis completado. Revise y edite los campos.');

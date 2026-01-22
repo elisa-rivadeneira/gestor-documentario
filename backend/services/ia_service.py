@@ -121,6 +121,8 @@ def extraer_numero_con_ocr(ruta_pdf: str) -> str:
 
     # Buscar patrones de número de oficio/carta en el ENCABEZADO
     patrones = [
+        # Carta N° 001-2026-NEMAEC/PRESIDENCIA (formato NEMAEC - prioridad alta)
+        r'Carta\s*N[°º]?\s*(\d{3})\s*-\s*(\d{4})\s*-\s*(NEMAEC/PRESIDENCIA)',
         # OFICIO N° 000035-2026-MIDIS/FONCODES/UGPE
         r'OFICIO\s*N[°º]?\s*(\d{5,6})\s*-\s*(\d{4})\s*-\s*(\S+)',
         # CARTA N° 000035-2026-MIDIS/FONCODES/UGPE
@@ -134,17 +136,51 @@ def extraer_numero_con_ocr(ruta_pdf: str) -> str:
         match = re.search(patron, texto_encabezado, re.IGNORECASE)
         if match:
             grupos = match.groups()
-            numero = grupos[0].zfill(5)
             anio = grupos[1]
             sufijo = grupos[2] if len(grupos) > 2 else "MIDIS/FONCODES/UGPE"
 
-            # Determinar si es oficio o carta
-            tipo = "OFICIO" if "OFICIO" in patron else "CARTA"
-            resultado = f"{tipo} N°{numero}-{anio}-{sufijo}"
+            # Verificar si es formato NEMAEC (3 dígitos) o estándar (5 dígitos)
+            if "NEMAEC" in sufijo:
+                numero = grupos[0].zfill(3)
+                resultado = f"Carta N° {numero}-{anio}-{sufijo}"
+            else:
+                numero = grupos[0].zfill(5)
+                # Determinar si es oficio o carta
+                tipo = "OFICIO" if "OFICIO" in patron else "CARTA"
+                resultado = f"{tipo} N°{numero}-{anio}-{sufijo}"
+
             print(f"Número encontrado con OCR (del encabezado): {resultado}")
             return resultado
 
     print("No se encontró número de oficio/carta con OCR en el encabezado")
+    return ""
+
+
+def extraer_oficio_referencia(texto: str) -> str:
+    """
+    Extrae el número de oficio de referencia de una carta.
+    Busca en la sección "Referencia:" el número de OFICIO.
+    """
+    # Buscar la sección de referencia
+    patrones_referencia = [
+        # Referencia: a) OFICIO N° 000336-2025-MIDIS/FONCODES/UGPE
+        r'Referencia[:\s]+(?:[a-z]\)[\s]*)?(OFICIO\s*N[°º]?\s*\d{5,6}\s*-\s*\d{4}\s*-\s*\S+)',
+        # Ref: OFICIO N° 000336-2025-MIDIS/FONCODES/UGPE
+        r'Ref[.:\s]+(?:[a-z]\)[\s]*)?(OFICIO\s*N[°º]?\s*\d{5,6}\s*-\s*\d{4}\s*-\s*\S+)',
+        # OFICIO N° después de Referencia en cualquier formato
+        r'Referencia[^O]*(OFICIO\s*N[°º]?\s*\d{5,6}\s*-\s*\d{4}\s*-\s*[A-Z/]+)',
+    ]
+
+    for patron in patrones_referencia:
+        match = re.search(patron, texto, re.IGNORECASE)
+        if match:
+            oficio = match.group(1).strip()
+            # Normalizar formato: OFICIO N°XXXXX-YYYY-SUFIJO
+            oficio = re.sub(r'\s+', '', oficio)  # Quitar espacios extra
+            oficio = re.sub(r'N[°º]?', 'N°', oficio)  # Normalizar N°
+            print(f"Oficio de referencia encontrado: {oficio}")
+            return oficio
+
     return ""
 
 
@@ -178,6 +214,13 @@ def extraer_numero_oficio(texto: str) -> str:
             pos = texto.find(marcador)
             if pos > 0 and pos < len(texto_encabezado):
                 texto_encabezado = texto[:pos]
+
+        # Primero buscar formato NEMAEC: Carta N° 001-2026-NEMAEC/PRESIDENCIA
+        patron_nemaec = re.search(r'Carta\s*N[°º]?\s*(\d{3})\s*-\s*(\d{4})\s*-\s*(NEMAEC/PRESIDENCIA)', texto_encabezado, re.IGNORECASE)
+        if patron_nemaec:
+            numero_correlativo = patron_nemaec.group(1).zfill(3)
+            anio = patron_nemaec.group(2)
+            return f"Carta N° {numero_correlativo}-{anio}-NEMAEC/PRESIDENCIA"
 
         # Buscar "OFICIO N°00030-2026" con número explícito en el encabezado
         patron_pdf = re.search(r'OFICIO\s*N[°º]?\s*(\d{5,6})\s*-\s*(\d{4})', texto_encabezado, re.IGNORECASE)
@@ -235,6 +278,7 @@ class IAService:
                 "asunto": "",
                 "resumen": "",
                 "mensaje_whatsapp": "",
+                "oficio_referencia": "",
                 "exito": False,
                 "mensaje": "API de IA no configurada. Configure OPENAI_API_KEY en .env"
             }
@@ -248,6 +292,7 @@ class IAService:
                 "asunto": "",
                 "resumen": "",
                 "mensaje_whatsapp": "",
+                "oficio_referencia": "",
                 "exito": False,
                 "mensaje": "El texto es muy corto para analizar. Se requieren al menos 50 caracteres."
             }
@@ -286,6 +331,15 @@ class IAService:
    Resumen: [Qué pide y para cuándo, sin mencionar adjuntos ni destinatario]"
    IMPORTANTE: Sé CONCISO y directo. Solo: qué pide + para cuándo + nombre del proyecto si aplica.
 
+8. **Oficio de Referencia**: Si el documento es una CARTA que responde a un OFICIO:
+   - Busca en la sección "Referencia:", "Ref:", "REF." o similar
+   - La referencia puede tener formato con letras: "Referencia: a) OFICIO N°..." o "Referencia: OFICIO N°..."
+   - Extrae SOLO el número del OFICIO (no convocatorias, no convenios)
+   - Ejemplo 1: "Referencia: OFICIO N°00030-2026-MIDIS/FONCODES/UGPE" → extraer "OFICIO N°00030-2026-MIDIS/FONCODES/UGPE"
+   - Ejemplo 2: "Referencia: a) OFICIO N° 000336-2025-MIDIS/FONCODES/UGPE" → extraer "OFICIO N°000336-2025-MIDIS/FONCODES/UGPE"
+   - Si hay múltiples referencias (a, b, c), extrae solo el OFICIO, ignorando convocatorias
+   - Si no hay referencia a un OFICIO, dejar vacío ""
+
 IMPORTANTE:
 - El NOMBRE DEL ARCHIVO es la fuente más confiable para el número de oficio
 - Si el nombre del archivo tiene "00003" o similar, ese es el número correlativo
@@ -306,7 +360,8 @@ Responde ÚNICAMENTE con un JSON válido:
     "destinatario": "nombre completo del destinatario",
     "asunto": "asunto del documento",
     "resumen": "resumen indicando qué solicita y para cuándo",
-    "mensaje_whatsapp": "OFICIO N°00003-2025-MIDIS/FONCODES/UGPE\\nAsunto: Solicitud de información\\nResumen: Se solicita a UGPE enviar información de proyectos para el 15 de enero 2025"
+    "mensaje_whatsapp": "OFICIO N°00003-2025-MIDIS/FONCODES/UGPE\\nAsunto: Solicitud de información\\nResumen: Se solicita a UGPE enviar información de proyectos para el 15 de enero 2025",
+    "oficio_referencia": "OFICIO N°00030-2026-MIDIS/FONCODES/UGPE"
 }}"""
 
         try:
@@ -349,6 +404,11 @@ Responde ÚNICAMENTE con un JSON válido:
             # Construir mensaje WhatsApp con formato correcto
             mensaje_whatsapp = f"{numero_oficio}\nAsunto: {asunto}\nResumen: {resumen}"
 
+            # Extraer oficio de referencia: primero intentar con regex, luego usar lo de la IA
+            oficio_referencia = extraer_oficio_referencia(texto)
+            if not oficio_referencia:
+                oficio_referencia = resultado.get("oficio_referencia", "")
+
             return {
                 "numero_oficio": numero_oficio,
                 "fecha": resultado.get("fecha", ""),
@@ -357,6 +417,7 @@ Responde ÚNICAMENTE con un JSON válido:
                 "asunto": asunto,
                 "resumen": resumen,
                 "mensaje_whatsapp": mensaje_whatsapp,
+                "oficio_referencia": oficio_referencia,
                 "exito": True,
                 "mensaje": "Análisis completado exitosamente"
             }
@@ -370,6 +431,7 @@ Responde ÚNICAMENTE con un JSON válido:
                 "asunto": "",
                 "resumen": "",
                 "mensaje_whatsapp": "",
+                "oficio_referencia": "",
                 "exito": False,
                 "mensaje": f"Error al procesar respuesta de IA: {str(e)}"
             }
@@ -382,6 +444,7 @@ Responde ÚNICAMENTE con un JSON válido:
                 "asunto": "",
                 "resumen": "",
                 "mensaje_whatsapp": "",
+                "oficio_referencia": "",
                 "exito": False,
                 "mensaje": f"Error en análisis IA: {str(e)}"
             }

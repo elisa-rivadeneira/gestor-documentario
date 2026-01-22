@@ -362,9 +362,11 @@ async def analizar_archivo_con_ia(nombre_archivo: str):
         resultado["mensaje_whatsapp"] = f"{numero_ocr}\nAsunto: {resultado.get('asunto', '')}\nResumen: {resultado.get('resumen', '')}"
         resultado["mensaje"] = "Análisis completado (número extraído con OCR)"
     else:
-        # Verificar si el número de oficio tiene el formato correcto (debe tener 5+ dígitos)
+        # Verificar si el número de oficio tiene el formato correcto
+        # Acepta 5-6 dígitos para oficios O 3 dígitos para cartas NEMAEC
         numero_actual = resultado.get("numero_oficio", "")
-        tiene_numero_valido = bool(re.search(r'\d{5,6}', numero_actual))
+        es_nemaec = "NEMAEC" in numero_actual.upper()
+        tiene_numero_valido = bool(re.search(r'\d{5,6}', numero_actual)) or (es_nemaec and bool(re.search(r'\d{3}', numero_actual)))
 
         # Si no se encontró número válido y OCR está disponible, intentar con OCR
         if not tiene_numero_valido and OCR_DISPONIBLE:

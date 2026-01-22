@@ -110,6 +110,7 @@ class AnalisisIAResponse(BaseModel):
     asunto: str = Field(default="", description="Asunto claro del documento")
     resumen: str = Field(default="", description="Resumen indicando qué solicita y para cuándo")
     mensaje_whatsapp: str = Field(default="", description="Mensaje formateado para compartir por WhatsApp")
+    oficio_referencia: str = Field(default="", description="Número del oficio al que responde esta carta")
     exito: bool = True
     mensaje: Optional[str] = None
 

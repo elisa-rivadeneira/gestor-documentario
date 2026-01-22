@@ -6,9 +6,11 @@
 DATA_DIR="/data"
 DB_FILE="$DATA_DIR/correspondencia.db"
 INITIAL_DB="/app/correspondencia.db.initial"
+UPLOADS_DIR="$DATA_DIR/uploads"
 
-# Crear directorio de datos si no existe
+# Crear directorios de datos si no existen
 mkdir -p $DATA_DIR
+mkdir -p $UPLOADS_DIR
 
 # Si no existe la base de datos en el volumen, copiar la inicial
 if [ ! -f "$DB_FILE" ]; then

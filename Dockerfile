@@ -27,14 +27,14 @@ COPY frontend/ ./frontend/
 COPY correspondencia.db ./correspondencia.db.initial
 
 # Crear directorios necesarios
-RUN mkdir -p /app/uploads /data
+RUN mkdir -p /data/uploads
 
 # Hacer ejecutable el script de inicio
 RUN chmod +x /app/backend/start.sh
 
 # Variables de entorno
 ENV PYTHONUNBUFFERED=1
-ENV UPLOAD_DIR=/app/uploads
+ENV UPLOAD_DIR=/data/uploads
 ENV DATABASE_PATH=/data/correspondencia.db
 
 # Exponer puerto

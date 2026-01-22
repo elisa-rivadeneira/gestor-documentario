@@ -48,8 +48,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Directorio para archivos subidos
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+# Directorio para archivos subidos (usa variable de entorno en producción)
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads"))
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Montar directorio de uploads
@@ -429,9 +429,10 @@ async def asociar_archivo_temporal(
 
     # Generar nuevo nombre con el ID del documento
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Extraer el nombre original del archivo (quitar prefijo temp_XXXXXX_)
-    partes = nombre_temporal.split('_', 2)
-    nombre_original = partes[2] if len(partes) > 2 else nombre_temporal
+    # Extraer el nombre original del archivo (quitar prefijo temp_YYYYMMDD_HHMMSS_)
+    # El formato temporal es: temp_20260122_203103_NombreOriginal.pdf
+    partes = nombre_temporal.split('_', 3)
+    nombre_original = partes[3] if len(partes) > 3 else nombre_temporal
     nuevo_nombre = f"{documento_id}_{timestamp}_{nombre_original}"
     ruta_nueva = os.path.join(UPLOAD_DIR, nuevo_nombre)
 

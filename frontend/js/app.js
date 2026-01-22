@@ -266,7 +266,7 @@ async function cargarDocumentos() {
         // Si estamos en cartas-nemaec, cargar también los oficios para el mapa de referencias
         if (state.categoriaActual === 'cartas-nemaec') {
             try {
-                const oficiosData = await apiListarDocumentos({ tipo_documento: 'oficio', por_pagina: 200 });
+                const oficiosData = await apiListarDocumentos({ tipo_documento: 'oficio', por_pagina: 100 });
                 state.oficiosDisponibles = oficiosData.documentos || [];
             } catch (err) {
                 console.error('Error al cargar oficios para referencia:', err);

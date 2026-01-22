@@ -298,9 +298,13 @@ class IAService:
             }
 
         # Log para depuración - ver primeras líneas del texto extraído
+        # Usar repr() para evitar UnicodeEncodeError en Windows
         print("=" * 50)
         print("TEXTO EXTRAÍDO DEL PDF (primeros 1000 caracteres):")
-        print(texto[:1000])
+        try:
+            print(texto[:1000])
+        except UnicodeEncodeError:
+            print(f"[Texto con caracteres especiales - longitud: {len(texto[:1000])}]")
         print("=" * 50)
 
         prompt = f"""Analiza el siguiente documento institucional (oficio o carta) y extrae la información:

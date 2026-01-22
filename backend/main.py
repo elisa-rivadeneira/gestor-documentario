@@ -298,6 +298,48 @@ async def subir_archivo_temporal(archivo: UploadFile = File(...)):
     }
 
 
+@app.post("/api/documentos/{documento_id}/asociar-archivo")
+async def asociar_archivo_temporal(
+    documento_id: int,
+    nombre_temporal: str = Query(..., description="Nombre del archivo temporal a asociar"),
+    db: Session = Depends(get_db)
+):
+    """
+    Asocia un archivo temporal ya subido a un documento.
+    Renombra el archivo con el ID del documento.
+    """
+    documento = db.query(Documento).filter(Documento.id == documento_id).first()
+    if not documento:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    # Verificar que el archivo temporal existe
+    ruta_temporal = os.path.join(UPLOAD_DIR, nombre_temporal)
+    if not os.path.exists(ruta_temporal):
+        raise HTTPException(status_code=404, detail="Archivo temporal no encontrado")
+
+    # Generar nuevo nombre con el ID del documento
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Extraer el nombre original del archivo (quitar prefijo temp_XXXXXX_)
+    partes = nombre_temporal.split('_', 2)
+    nombre_original = partes[2] if len(partes) > 2 else nombre_temporal
+    nuevo_nombre = f"{documento_id}_{timestamp}_{nombre_original}"
+    ruta_nueva = os.path.join(UPLOAD_DIR, nuevo_nombre)
+
+    # Renombrar archivo
+    os.rename(ruta_temporal, ruta_nueva)
+
+    # Actualizar documento
+    documento.archivo_local = nuevo_nombre
+    documento.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "mensaje": "Archivo asociado exitosamente",
+        "archivo": nuevo_nombre,
+        "ruta": f"/uploads/{nuevo_nombre}"
+    }
+
+
 # ============================================
 # ENDPOINTS DE ANÁLISIS IA
 # ============================================

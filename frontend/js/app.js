@@ -780,12 +780,9 @@ async function guardarDocumento(event) {
                     // Actualizar el documento existente
                     resultado = await apiActualizarDocumento(documentoExistente.id, documento);
 
-                    // Si hay archivo temporal, asociarlo
+                    // Si hay archivo temporal, asociarlo al documento
                     if (state.archivoTemporal) {
-                        const archivo = document.getElementById('doc-archivo').files[0];
-                        if (archivo) {
-                            await apiSubirArchivo(documentoExistente.id, archivo);
-                        }
+                        await apiAsociarArchivoTemporal(documentoExistente.id, state.archivoTemporal);
                     }
 
                     // Subir adjuntos temporales si hay
@@ -801,12 +798,9 @@ async function guardarDocumento(event) {
                 // Crear nuevo documento
                 resultado = await apiCrearDocumento(documento);
 
-                // Si hay archivo temporal, asociarlo
+                // Si hay archivo temporal, asociarlo al documento
                 if (state.archivoTemporal) {
-                    const archivo = document.getElementById('doc-archivo').files[0];
-                    if (archivo) {
-                        await apiSubirArchivo(resultado.id, archivo);
-                    }
+                    await apiAsociarArchivoTemporal(resultado.id, state.archivoTemporal);
                 }
 
                 // Subir adjuntos temporales si hay

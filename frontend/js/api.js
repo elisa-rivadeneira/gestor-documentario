@@ -151,6 +151,15 @@ async function apiSubirArchivoTemporal(archivo) {
     });
 }
 
+/**
+ * Asocia un archivo temporal ya subido a un documento
+ */
+async function apiAsociarArchivoTemporal(documentoId, nombreTemporal) {
+    return await fetchAPI(`/documentos/${documentoId}/asociar-archivo?nombre_temporal=${encodeURIComponent(nombreTemporal)}`, {
+        method: 'POST',
+    });
+}
+
 // ============================================
 // ANÁLISIS IA
 // ============================================

@@ -637,6 +637,54 @@ def eliminar_adjunto(
 
 
 # ============================================
+# ENDPOINT DE RESTAURACIÓN DE UPLOADS
+# ============================================
+
+@app.post("/api/restaurar-uploads")
+async def restaurar_uploads(
+    archivo: UploadFile = File(...),
+    admin: dict = Depends(verificar_admin)
+):
+    """
+    Restaura archivos de uploads desde un ZIP.
+    Solo admin puede usar este endpoint.
+    """
+    import zipfile
+    import io
+
+    if not archivo.filename.lower().endswith('.zip'):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos ZIP")
+
+    # Leer el ZIP
+    contenido = await archivo.read()
+
+    try:
+        archivos_restaurados = []
+        with zipfile.ZipFile(io.BytesIO(contenido), 'r') as zip_ref:
+            for nombre in zip_ref.namelist():
+                # Ignorar directorios y archivos ocultos
+                if nombre.endswith('/') or nombre.startswith('.') or '/' in nombre:
+                    continue
+
+                # Extraer solo archivos PDF
+                if nombre.lower().endswith('.pdf'):
+                    ruta_destino = os.path.join(UPLOAD_DIR, nombre)
+                    # Solo extraer si no existe (no sobrescribir)
+                    if not os.path.exists(ruta_destino):
+                        with zip_ref.open(nombre) as src, open(ruta_destino, 'wb') as dst:
+                            dst.write(src.read())
+                        archivos_restaurados.append(nombre)
+
+        return {
+            "mensaje": f"Restauración completada",
+            "archivos_restaurados": len(archivos_restaurados),
+            "lista": archivos_restaurados[:20]  # Mostrar máximo 20
+        }
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Archivo ZIP inválido")
+
+
+# ============================================
 # ENDPOINT DE SALUD
 # ============================================
 

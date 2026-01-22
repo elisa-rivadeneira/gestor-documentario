@@ -265,14 +265,20 @@ async function cargarDocumentos() {
     try {
         // Si estamos en cartas-nemaec, cargar también los oficios para el mapa de referencias
         if (state.categoriaActual === 'cartas-nemaec') {
-            const oficiosData = await apiListarDocumentos({ tipo_documento: 'oficio', por_pagina: 200 });
-            state.oficiosDisponibles = oficiosData.documentos;
+            try {
+                const oficiosData = await apiListarDocumentos({ tipo_documento: 'oficio', por_pagina: 200 });
+                state.oficiosDisponibles = oficiosData.documentos || [];
+            } catch (err) {
+                console.error('Error al cargar oficios para referencia:', err);
+                state.oficiosDisponibles = [];
+            }
         }
 
         let data = await apiListarDocumentos(filtros);
 
         // Filtrar por oficio de referencia si hay filtro
-        const filtroReferencia = document.getElementById('filtro-referencia').value.trim().toLowerCase();
+        const filtroReferenciaEl = document.getElementById('filtro-referencia');
+        const filtroReferencia = filtroReferenciaEl ? filtroReferenciaEl.value.trim().toLowerCase() : '';
         if (filtroReferencia && state.categoriaActual === 'cartas-nemaec') {
             // Crear mapa de oficios
             const oficiosMap = {};
@@ -298,7 +304,9 @@ async function cargarDocumentos() {
 
         renderizarDocumentos(data);
     } catch (error) {
-        mostrarToast('Error al cargar documentos: ' + error.message, 'error');
+        console.error('Error al cargar documentos:', error);
+        const mensaje = error.message || error.toString() || 'Error desconocido';
+        mostrarToast('Error al cargar documentos: ' + mensaje, 'error');
     }
 }
 

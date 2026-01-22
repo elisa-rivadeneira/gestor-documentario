@@ -16,10 +16,26 @@
                 <h1 class="text-2xl font-bold cursor-pointer" onclick="mostrarBandeja()">
                     NEMAEC - GESTOR DOCUMENTARIO
                 </h1>
-                <button onclick="mostrarFormularioNuevo()"
-                        class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium transition">
-                    + Nuevo Documento
-                </button>
+                <div class="flex items-center gap-4">
+                    <!-- Botón Nuevo Documento (solo admin) -->
+                    <button id="btn-nuevo-header" onclick="mostrarFormularioNuevo()"
+                            class="admin-only hidden bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium transition">
+                        + Nuevo Documento
+                    </button>
+                    <!-- Info usuario y logout (cuando está logueado) -->
+                    <div id="usuario-info" class="hidden flex items-center gap-3">
+                        <span id="usuario-nombre" class="text-sm"></span>
+                        <button onclick="hacerLogout()"
+                                class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm transition">
+                            Salir
+                        </button>
+                    </div>
+                    <!-- Botón acceso admin (cuando no está logueado) -->
+                    <button id="btn-login" onclick="mostrarLogin()"
+                            class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg font-medium transition">
+                        Acceso Admin
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -70,7 +86,7 @@
                     </div>
                     <button onclick="crearDocumentoRapido()"
                             id="btn-crear-rapido"
-                            class="bg-green-600 hover:bg-green-700 text-white w-10 h-10 rounded-full font-bold text-2xl transition flex items-center justify-center shadow-lg"
+                            class="admin-only hidden bg-green-600 hover:bg-green-700 text-white w-10 h-10 rounded-full font-bold text-2xl transition flex items-center justify-center shadow-lg"
                             title="Crear nuevo documento">
                         +
                     </button>
@@ -368,7 +384,7 @@
                             </span>
                             <h2 id="det-titulo" class="text-2xl font-bold text-gray-800"></h2>
                         </div>
-                        <div class="flex gap-2">
+                        <div id="det-botones-admin" class="admin-only hidden flex gap-2">
                             <button onclick="editarDocumento()"
                                     class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg">
                                 Editar
@@ -423,13 +439,54 @@
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="font-semibold text-gray-700">Cartas de Respuesta</h3>
                         <button onclick="crearRespuesta()"
-                                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">
+                                class="admin-only hidden bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">
                             + Nueva Respuesta
                         </button>
                     </div>
                     <div id="lista-respuestas"></div>
                 </div>
 
+            </div>
+        </div>
+
+        <!-- Vista: Login -->
+        <div id="vista-login" class="vista hidden">
+            <div class="max-w-md mx-auto mt-10">
+                <div class="bg-white rounded-lg shadow-lg p-8">
+                    <div class="text-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Acceso Administrador</h2>
+                        <p class="text-gray-500 mt-2">Ingresa tus credenciales para gestionar documentos</p>
+                    </div>
+
+                    <form id="form-login" onsubmit="hacerLogin(event)">
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+                            <input type="text" id="login-usuario" required
+                                   class="w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Ingresa tu usuario">
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                            <input type="password" id="login-password" required
+                                   class="w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Ingresa tu contraseña">
+                        </div>
+
+                        <div id="login-error" class="hidden mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm"></div>
+
+                        <button type="submit" id="btn-login-submit"
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition">
+                            Iniciar Sesión
+                        </button>
+                    </form>
+
+                    <div class="mt-6 text-center">
+                        <button onclick="mostrarBandeja()" class="text-gray-500 hover:text-gray-700 text-sm">
+                            ← Volver a la bandeja (solo lectura)
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </main>

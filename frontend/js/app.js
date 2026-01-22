@@ -22,9 +22,96 @@ let state = {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Verificar autenticación y actualizar UI
+    actualizarUIAutenticacion();
     // Inicializar con "oficios" seleccionado por defecto
     filtrarPorCategoria('oficios');
 });
+
+// ============================================
+// AUTENTICACIÓN
+// ============================================
+
+/**
+ * Actualiza la UI según el estado de autenticación
+ */
+function actualizarUIAutenticacion() {
+    const autenticado = estaAutenticado();
+    const btnLogin = document.getElementById('btn-login');
+    const usuarioInfo = document.getElementById('usuario-info');
+    const usuarioNombre = document.getElementById('usuario-nombre');
+
+    // Elementos que solo se muestran para admins
+    const elementosAdmin = document.querySelectorAll('.admin-only');
+
+    if (autenticado) {
+        // Mostrar info de usuario y ocultar botón login
+        btnLogin.classList.add('hidden');
+        usuarioInfo.classList.remove('hidden');
+        const usuario = getUsuarioActual();
+        usuarioNombre.textContent = usuario.nombre || usuario.usuario;
+
+        // Mostrar elementos de admin
+        elementosAdmin.forEach(el => el.classList.remove('hidden'));
+    } else {
+        // Mostrar botón login y ocultar info de usuario
+        btnLogin.classList.remove('hidden');
+        usuarioInfo.classList.add('hidden');
+
+        // Ocultar elementos de admin
+        elementosAdmin.forEach(el => el.classList.add('hidden'));
+    }
+}
+
+/**
+ * Muestra la vista de login
+ */
+function mostrarLogin() {
+    mostrarVista('vista-login');
+    document.getElementById('login-usuario').focus();
+}
+
+/**
+ * Procesa el formulario de login
+ */
+async function hacerLogin(event) {
+    event.preventDefault();
+
+    const usuario = document.getElementById('login-usuario').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errorEl = document.getElementById('login-error');
+    const btnSubmit = document.getElementById('btn-login-submit');
+
+    // Limpiar error previo
+    errorEl.classList.add('hidden');
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = 'Ingresando...';
+
+    try {
+        await apiLogin(usuario, password);
+        // Login exitoso
+        actualizarUIAutenticacion();
+        mostrarBandeja();
+        mostrarToast(`Bienvenido, ${getUsuarioActual().nombre}`);
+    } catch (error) {
+        // Mostrar error
+        errorEl.textContent = error.message || 'Usuario o contraseña incorrectos';
+        errorEl.classList.remove('hidden');
+    } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = 'Iniciar Sesión';
+    }
+}
+
+/**
+ * Cierra la sesión del usuario
+ */
+function hacerLogout() {
+    apiLogout();
+    actualizarUIAutenticacion();
+    mostrarBandeja();
+    mostrarToast('Sesión cerrada');
+}
 
 // ============================================
 // NAVEGACIÓN POR CATEGORÍAS
@@ -351,6 +438,8 @@ function renderizarDocumentos(data) {
     // Determinar colspan según si se muestra la columna de referencia
     const colspan = state.categoriaActual === 'cartas-nemaec' ? 7 : 6;
 
+    const esAdmin = estaAutenticado();
+
     if (data.documentos.length === 0) {
         container.innerHTML = `
             <tr>
@@ -361,10 +450,12 @@ function renderizarDocumentos(data) {
                                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <p class="text-gray-500 mb-4">No hay documentos registrados</p>
+                        ${esAdmin ? `
                         <button onclick="mostrarFormularioNuevo()"
                                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
                             Registrar primer documento
                         </button>
+                        ` : ''}
                     </div>
                 </td>
             </tr>
@@ -401,6 +492,7 @@ function renderizarDocumentos(data) {
             <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalle(${doc.id})">${formatearFecha(doc.fecha)}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalle(${doc.id})">${doc.asunto || 'Sin asunto'}</td>
             <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate cursor-pointer" onclick="verDetalle(${doc.id})" title="${doc.resumen || ''}">${truncarTexto(doc.resumen, 100) || '-'}</td>
+            ${esAdmin ? `
             <td class="px-4 py-3 text-center">
                 <button onclick="confirmarEliminar(${doc.id}, '${(doc.numero || '').replace(/'/g, "\\'")}'); event.stopPropagation();"
                         class="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"
@@ -410,6 +502,7 @@ function renderizarDocumentos(data) {
                     </svg>
                 </button>
             </td>
+            ` : '<td></td>'}
         </tr>
     `}).join('');
 

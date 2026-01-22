@@ -70,3 +70,17 @@ class Adjunto(Base):
 
     # Relación
     documento = relationship("Documento", back_populates="adjuntos")
+
+
+class Usuario(Base):
+    """
+    Modelo para usuarios administradores del sistema.
+    """
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    nombre = Column(String(100), nullable=False)  # Nombre completo para mostrar
+    activo = Column(Integer, default=1)  # 1 = activo, 0 = inactivo
+    created_at = Column(DateTime, server_default=func.now())

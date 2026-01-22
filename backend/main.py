@@ -7,7 +7,7 @@ import re
 import shutil
 from datetime import datetime
 from typing import Optional, List
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -16,15 +16,21 @@ from sqlalchemy import or_
 import pdfplumber
 
 from database import engine, get_db, Base
-from models import Documento, Adjunto
+from models import Documento, Adjunto, Usuario
 from schemas import (
     DocumentoCreate, DocumentoUpdate, DocumentoResponse, DocumentoListResponse,
-    AdjuntoCreate, AdjuntoResponse, AnalisisIARequest, AnalisisIAResponse
+    AdjuntoCreate, AdjuntoResponse, AnalisisIARequest, AnalisisIAResponse,
+    LoginRequest, LoginResponse, UsuarioResponse
 )
 from services.ia_service import ia_service, extraer_numero_con_ocr, OCR_DISPONIBLE
+from services.auth_service import hash_password, verify_password, create_token, verify_token
+from init_users import crear_usuarios_iniciales
 
 # Crear tablas en la base de datos
 Base.metadata.create_all(bind=engine)
+
+# Crear usuarios iniciales si no existen
+crear_usuarios_iniciales()
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -48,6 +54,93 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Montar directorio de uploads
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+
+# ============================================
+# AUTENTICACIÓN
+# ============================================
+
+def verificar_admin(authorization: Optional[str] = Header(None)) -> Usuario:
+    """
+    Dependency para verificar que el usuario está autenticado.
+    Extrae el token del header Authorization.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="No autorizado - Token requerido")
+
+    # Extraer token del header "Bearer <token>"
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="Esquema de autorización inválido")
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Header de autorización inválido")
+
+    # Verificar token
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
+    return payload
+
+
+def verificar_admin_opcional(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """
+    Dependency opcional - no falla si no hay token, solo retorna None.
+    Útil para endpoints que pueden ser públicos o autenticados.
+    """
+    if not authorization:
+        return None
+
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            return None
+        payload = verify_token(token)
+        return payload
+    except:
+        return None
+
+
+@app.post("/api/login", response_model=LoginResponse)
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Endpoint de login. Verifica credenciales y retorna token JWT.
+    """
+    # Buscar usuario
+    usuario = db.query(Usuario).filter(Usuario.username == request.username).first()
+
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+
+    if not usuario.activo:
+        raise HTTPException(status_code=401, detail="Usuario desactivado")
+
+    # Verificar contraseña
+    if not verify_password(request.password, usuario.password_hash):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+
+    # Generar token
+    token = create_token(usuario.username, usuario.nombre)
+
+    return LoginResponse(
+        token=token,
+        usuario=usuario.username,
+        nombre=usuario.nombre,
+        mensaje="Login exitoso"
+    )
+
+
+@app.get("/api/verificar-token")
+def verificar_token_endpoint(admin: dict = Depends(verificar_admin)):
+    """
+    Verifica si el token actual es válido.
+    """
+    return {
+        "valido": True,
+        "usuario": admin.get("sub"),
+        "nombre": admin.get("nombre")
+    }
 
 
 # ============================================
@@ -120,10 +213,12 @@ def listar_documentos(
 @app.post("/api/documentos", response_model=DocumentoResponse, status_code=201)
 def crear_documento(
     documento: DocumentoCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
 ):
     """
     Crea un nuevo documento (oficio o carta).
+    Requiere autenticación de admin.
     """
     # Validar que no exista un documento con el mismo número
     if documento.numero:
@@ -176,10 +271,12 @@ def obtener_documento(documento_id: int, db: Session = Depends(get_db)):
 def actualizar_documento(
     documento_id: int,
     documento_update: DocumentoUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
 ):
     """
     Actualiza un documento existente.
+    Requiere autenticación de admin.
     """
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
@@ -197,9 +294,14 @@ def actualizar_documento(
 
 
 @app.delete("/api/documentos/{documento_id}", status_code=204)
-def eliminar_documento(documento_id: int, db: Session = Depends(get_db)):
+def eliminar_documento(
+    documento_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
     """
     Elimina un documento y sus adjuntos.
+    Requiere autenticación de admin.
     """
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
@@ -240,10 +342,12 @@ def obtener_respuestas(documento_id: int, db: Session = Depends(get_db)):
 async def subir_archivo(
     documento_id: int,
     archivo: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
 ):
     """
     Sube un archivo PDF a un documento existente.
+    Requiere autenticación de admin.
     """
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
@@ -275,9 +379,13 @@ async def subir_archivo(
 
 
 @app.post("/api/subir-temporal")
-async def subir_archivo_temporal(archivo: UploadFile = File(...)):
+async def subir_archivo_temporal(
+    archivo: UploadFile = File(...),
+    admin: dict = Depends(verificar_admin)
+):
     """
     Sube un archivo temporalmente para análisis antes de crear el documento.
+    Requiere autenticación de admin.
     """
     if not archivo.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF")
@@ -302,11 +410,13 @@ async def subir_archivo_temporal(archivo: UploadFile = File(...)):
 async def asociar_archivo_temporal(
     documento_id: int,
     nombre_temporal: str = Query(..., description="Nombre del archivo temporal a asociar"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
 ):
     """
     Asocia un archivo temporal ya subido a un documento.
     Renombra el archivo con el ID del documento.
+    Requiere autenticación de admin.
     """
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
@@ -345,10 +455,14 @@ async def asociar_archivo_temporal(
 # ============================================
 
 @app.post("/api/analizar-ia", response_model=AnalisisIAResponse)
-async def analizar_con_ia(request: AnalisisIARequest):
+async def analizar_con_ia(
+    request: AnalisisIARequest,
+    admin: dict = Depends(verificar_admin)
+):
     """
     Analiza texto con IA y genera título, asunto y resumen.
     Recibe texto directamente.
+    Requiere autenticación de admin.
     """
     if not request.texto:
         raise HTTPException(status_code=400, detail="Se requiere texto para analizar")
@@ -358,10 +472,14 @@ async def analizar_con_ia(request: AnalisisIARequest):
 
 
 @app.post("/api/analizar-archivo/{nombre_archivo}", response_model=AnalisisIAResponse)
-async def analizar_archivo_con_ia(nombre_archivo: str):
+async def analizar_archivo_con_ia(
+    nombre_archivo: str,
+    admin: dict = Depends(verificar_admin)
+):
     """
     Extrae texto de un PDF y lo analiza con IA.
     Usa OCR como fallback si no se puede extraer el número de oficio.
+    Requiere autenticación de admin.
     """
     ruta_archivo = os.path.join(UPLOAD_DIR, nombre_archivo)
 
@@ -455,10 +573,12 @@ async def agregar_adjunto(
     archivo: UploadFile = File(None),
     enlace_drive: str = Query(None),
     nombre: str = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
 ):
     """
     Agrega un adjunto a un documento (archivo o enlace Drive).
+    Requiere autenticación de admin.
     """
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
@@ -491,9 +611,14 @@ async def agregar_adjunto(
 
 
 @app.delete("/api/adjuntos/{adjunto_id}", status_code=204)
-def eliminar_adjunto(adjunto_id: int, db: Session = Depends(get_db)):
+def eliminar_adjunto(
+    adjunto_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
     """
     Elimina un adjunto.
+    Requiere autenticación de admin.
     """
     adjunto = db.query(Adjunto).filter(Adjunto.id == adjunto_id).first()
     if not adjunto:

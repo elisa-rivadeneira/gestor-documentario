@@ -6,6 +6,50 @@
 // Detectar automáticamente la URL del API (funciona en local y producción)
 const API_BASE = window.location.origin + '/api';
 
+// ============================================
+// AUTENTICACIÓN
+// ============================================
+
+/**
+ * Obtiene el token almacenado
+ */
+function getToken() {
+    return localStorage.getItem('auth_token');
+}
+
+/**
+ * Guarda el token
+ */
+function setToken(token) {
+    localStorage.setItem('auth_token', token);
+}
+
+/**
+ * Elimina el token (logout)
+ */
+function removeToken() {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_usuario');
+    localStorage.removeItem('auth_nombre');
+}
+
+/**
+ * Verifica si el usuario está autenticado
+ */
+function estaAutenticado() {
+    return !!getToken();
+}
+
+/**
+ * Obtiene info del usuario logueado
+ */
+function getUsuarioActual() {
+    return {
+        usuario: localStorage.getItem('auth_usuario'),
+        nombre: localStorage.getItem('auth_nombre')
+    };
+}
+
 /**
  * Clase para manejar errores de la API
  */
@@ -31,6 +75,12 @@ async function fetchAPI(endpoint, options = {}) {
 
     const config = { ...defaultOptions, ...options };
 
+    // Agregar token de autenticación si existe
+    const token = getToken();
+    if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+    }
+
     // No incluir Content-Type para FormData
     if (options.body instanceof FormData) {
         delete config.headers['Content-Type'];
@@ -47,6 +97,10 @@ async function fetchAPI(endpoint, options = {}) {
         const data = await response.json();
 
         if (!response.ok) {
+            // Si es 401, limpiar token (sesión expirada)
+            if (response.status === 401) {
+                removeToken();
+            }
             throw new APIError(data.detail || 'Error en la petición', response.status);
         }
 
@@ -54,6 +108,43 @@ async function fetchAPI(endpoint, options = {}) {
     } catch (error) {
         if (error instanceof APIError) throw error;
         throw new APIError(`Error de conexión: ${error.message}`, 0);
+    }
+}
+
+/**
+ * Login de usuario
+ */
+async function apiLogin(username, password) {
+    const response = await fetchAPI('/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+    });
+
+    // Guardar token e info del usuario
+    if (response.token) {
+        setToken(response.token);
+        localStorage.setItem('auth_usuario', response.usuario);
+        localStorage.setItem('auth_nombre', response.nombre);
+    }
+
+    return response;
+}
+
+/**
+ * Logout de usuario
+ */
+function apiLogout() {
+    removeToken();
+}
+
+/**
+ * Verifica si el token actual es válido
+ */
+async function apiVerificarToken() {
+    try {
+        return await fetchAPI('/verificar-token');
+    } catch (error) {
+        return null;
     }
 }
 

@@ -123,3 +123,31 @@ class DocumentoFiltros(BaseModel):
     busqueda: Optional[str] = None
     pagina: int = 1
     por_pagina: int = 20
+
+
+# === Schemas para Autenticación ===
+
+class LoginRequest(BaseModel):
+    """Request para login"""
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Respuesta del login"""
+    token: str
+    usuario: str
+    nombre: str
+    mensaje: str = "Login exitoso"
+
+
+class UsuarioResponse(BaseModel):
+    """Respuesta de usuario (sin password)"""
+    id: int
+    username: str
+    nombre: str
+    activo: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

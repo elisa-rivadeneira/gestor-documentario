@@ -23,19 +23,22 @@ COPY backend/ ./backend/
 # Copiar frontend
 COPY frontend/ ./frontend/
 
-# Copiar base de datos (solo si no existe en el volumen)
-COPY correspondencia.db ./correspondencia.db
+# Copiar base de datos como inicial (solo se usa si el volumen está vacío)
+COPY correspondencia.db ./correspondencia.db.initial
 
-# Crear directorio de uploads
-RUN mkdir -p /app/uploads
+# Crear directorios necesarios
+RUN mkdir -p /app/uploads /data
+
+# Hacer ejecutable el script de inicio
+RUN chmod +x /app/backend/start.sh
 
 # Variables de entorno
 ENV PYTHONUNBUFFERED=1
 ENV UPLOAD_DIR=/app/uploads
+ENV DATABASE_PATH=/data/correspondencia.db
 
 # Exponer puerto
 EXPOSE 8000
 
-# Comando para iniciar el servidor
-WORKDIR /app/backend
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Comando para iniciar el servidor (usa el script que verifica la BD)
+CMD ["/app/backend/start.sh"]

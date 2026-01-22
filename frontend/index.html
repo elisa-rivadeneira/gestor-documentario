@@ -101,6 +101,15 @@
 
         <!-- Vista: Formulario Nuevo/Editar -->
         <div id="vista-formulario" class="vista hidden">
+            <!-- Breadcrumb -->
+            <div class="max-w-3xl mx-auto mb-4">
+                <button onclick="mostrarBandeja()" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    <span>Volver</span>
+                </button>
+            </div>
             <div class="bg-white rounded-lg shadow p-6 max-w-3xl mx-auto">
                 <h2 id="form-titulo" class="text-xl font-bold text-gray-800 mb-6">Nuevo Documento</h2>
 
@@ -342,6 +351,15 @@
         <!-- Vista: Detalle de Documento -->
         <div id="vista-detalle" class="vista hidden">
             <div class="max-w-3xl mx-auto">
+                <!-- Breadcrumb -->
+                <div class="mb-4">
+                    <button onclick="mostrarBandeja()" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        <span>Volver</span>
+                    </button>
+                </div>
                 <!-- Cabecera -->
                 <div class="bg-white rounded-lg shadow p-6 mb-4">
                     <div class="flex items-start justify-between mb-4">
@@ -412,11 +430,6 @@
                     <div id="lista-respuestas"></div>
                 </div>
 
-                <!-- Botón volver -->
-                <button onclick="mostrarBandeja()"
-                        class="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 py-3 rounded-lg font-medium transition">
-                    Volver a la Bandeja
-                </button>
             </div>
         </div>
     </main>

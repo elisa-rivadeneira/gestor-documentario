@@ -70,6 +70,7 @@ async function apiListarDocumentos(filtros = {}) {
     if (filtros.tipo_documento) params.append('tipo_documento', filtros.tipo_documento);
     if (filtros.direccion) params.append('direccion', filtros.direccion);
     if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+    if (filtros.ordenar_por) params.append('ordenar_por', filtros.ordenar_por);
     if (filtros.pagina) params.append('pagina', filtros.pagina);
     if (filtros.por_pagina) params.append('por_pagina', filtros.por_pagina);
 

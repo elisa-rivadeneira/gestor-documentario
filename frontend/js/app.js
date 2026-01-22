@@ -13,7 +13,8 @@ let state = {
     paginaActual: 1,
     editando: false,
     categoriaActual: 'oficios', // Por defecto: oficios
-    oficiosDisponibles: [] // Lista de oficios para el dropdown de referencia
+    oficiosDisponibles: [], // Lista de oficios para el dropdown de referencia
+    adjuntosTemporales: [] // Lista de adjuntos a subir
 };
 
 // ============================================
@@ -36,22 +37,43 @@ function filtrarPorCategoria(categoria) {
     // Configurar filtros según la categoría
     const filtroTipo = document.getElementById('filtro-tipo');
     const filtroDireccion = document.getElementById('filtro-direccion');
+    const filtroReferencia = document.getElementById('filtro-referencia');
+    const colReferencia = document.getElementById('col-referencia');
+    const colDocumento = document.getElementById('col-documento');
+
+    // Limpiar filtro de referencia al cambiar de categoría
+    filtroReferencia.value = '';
 
     switch (categoria) {
         case 'cartas-nemaec':
             // Cartas enviadas (NEMAEC)
             filtroTipo.value = 'carta';
             filtroDireccion.value = 'enviado';
+            // Mostrar columna y filtro de referencia
+            filtroReferencia.classList.remove('hidden');
+            colReferencia.classList.remove('hidden');
+            // Cambiar título de columna a CARTA
+            colDocumento.textContent = 'CARTA';
             break;
         case 'oficios':
             // Todos los oficios
             filtroTipo.value = 'oficio';
             filtroDireccion.value = '';
+            // Ocultar columna y filtro de referencia
+            filtroReferencia.classList.add('hidden');
+            colReferencia.classList.add('hidden');
+            // Cambiar título de columna a OFICIO
+            colDocumento.textContent = 'OFICIO';
             break;
         case 'cartas-recibidas':
             // Cartas recibidas
             filtroTipo.value = 'carta';
             filtroDireccion.value = 'recibido';
+            // Ocultar columna y filtro de referencia
+            filtroReferencia.classList.add('hidden');
+            colReferencia.classList.add('hidden');
+            // Cambiar título de columna a CARTA
+            colDocumento.textContent = 'CARTA';
             break;
     }
 
@@ -100,41 +122,36 @@ function mostrarFormularioNuevo() {
     state.editando = false;
     state.archivoTemporal = null;
     cargarDocumentosParaPadre();
-    // Mostrar el campo de dirección
-    document.getElementById('direccion-container').classList.remove('hidden');
     mostrarVista('vista-formulario');
 }
 
 function onTipoDocumentoChange() {
     const tipo = document.getElementById('doc-tipo').value;
-    const direccionContainer = document.getElementById('direccion-container');
-    const direccionSelect = document.getElementById('doc-direccion');
+    const direccionInput = document.getElementById('doc-direccion');
     const oficioRefContainer = document.getElementById('oficio-referencia-container');
 
-    if (tipo === 'oficio') {
-        // Para oficios, auto-seleccionar "recibido" y ocultar el campo
-        direccionSelect.value = 'recibido';
-        direccionContainer.classList.add('hidden');
-        oficioRefContainer.classList.add('hidden');
-    } else {
-        // Para cartas, mostrar el campo de dirección
-        direccionContainer.classList.remove('hidden');
-        // Cargar oficios para el campo de referencia
-        cargarOficiosParaReferencia();
-    }
-}
-
-function onDireccionChange() {
-    const tipo = document.getElementById('doc-tipo').value;
-    const direccion = document.getElementById('doc-direccion').value;
-    const oficioRefContainer = document.getElementById('oficio-referencia-container');
-
-    // Mostrar campo de referencia solo para cartas enviadas (NEMAEC)
-    if (tipo === 'carta' && direccion === 'enviado') {
-        oficioRefContainer.classList.remove('hidden');
-        cargarOficiosParaReferencia();
-    } else {
-        oficioRefContainer.classList.add('hidden');
+    // Mapear tipo a dirección automáticamente
+    switch (tipo) {
+        case 'carta-nemaec':
+            // CARTA NEMAEC = carta enviada
+            direccionInput.value = 'enviado';
+            // Mostrar campo de referencia para cartas NEMAEC
+            oficioRefContainer.classList.remove('hidden');
+            cargarOficiosParaReferencia();
+            break;
+        case 'oficio':
+            // OFICIO = recibido
+            direccionInput.value = 'recibido';
+            oficioRefContainer.classList.add('hidden');
+            break;
+        case 'carta-recibida':
+            // CARTA RECIBIDA = recibida
+            direccionInput.value = 'recibido';
+            oficioRefContainer.classList.add('hidden');
+            break;
+        default:
+            direccionInput.value = '';
+            oficioRefContainer.classList.add('hidden');
     }
 }
 
@@ -231,16 +248,54 @@ function seleccionarOficioPorNumero(numeroOficio) {
 // ============================================
 
 async function cargarDocumentos() {
+    // Determinar el ordenamiento según la categoría
+    // - cartas-recibidas: ordenar por fecha del documento y fecha de subida
+    // - oficios y cartas-nemaec: ordenar por número (año y correlativo)
+    const ordenamiento = state.categoriaActual === 'cartas-recibidas' ? 'fecha' : 'numero';
+
     const filtros = {
         tipo_documento: document.getElementById('filtro-tipo').value,
         direccion: document.getElementById('filtro-direccion').value,
         busqueda: document.getElementById('filtro-busqueda').value,
+        ordenar_por: ordenamiento,
         pagina: state.paginaActual,
-        por_pagina: 20
+        por_pagina: 100 // Cargar más para poder filtrar por referencia
     };
 
     try {
-        const data = await apiListarDocumentos(filtros);
+        // Si estamos en cartas-nemaec, cargar también los oficios para el mapa de referencias
+        if (state.categoriaActual === 'cartas-nemaec') {
+            const oficiosData = await apiListarDocumentos({ tipo_documento: 'oficio', por_pagina: 200 });
+            state.oficiosDisponibles = oficiosData.documentos;
+        }
+
+        let data = await apiListarDocumentos(filtros);
+
+        // Filtrar por oficio de referencia si hay filtro
+        const filtroReferencia = document.getElementById('filtro-referencia').value.trim().toLowerCase();
+        if (filtroReferencia && state.categoriaActual === 'cartas-nemaec') {
+            // Crear mapa de oficios
+            const oficiosMap = {};
+            if (state.oficiosDisponibles) {
+                state.oficiosDisponibles.forEach(ofi => {
+                    oficiosMap[ofi.id] = (ofi.numero || '').toLowerCase();
+                });
+            }
+
+            // Filtrar documentos que tienen referencia que coincide
+            const documentosFiltrados = data.documentos.filter(doc => {
+                if (!doc.documento_padre_id) return false;
+                const numReferencia = oficiosMap[doc.documento_padre_id] || '';
+                return numReferencia.includes(filtroReferencia);
+            });
+
+            data = {
+                ...data,
+                documentos: documentosFiltrados,
+                total: documentosFiltrados.length
+            };
+        }
+
         renderizarDocumentos(data);
     } catch (error) {
         mostrarToast('Error al cargar documentos: ' + error.message, 'error');
@@ -253,10 +308,13 @@ function renderizarDocumentos(data) {
 
     totalEl.textContent = `${data.total} documento(s) encontrado(s)`;
 
+    // Determinar colspan según si se muestra la columna de referencia
+    const colspan = state.categoriaActual === 'cartas-nemaec' ? 7 : 6;
+
     if (data.documentos.length === 0) {
         container.innerHTML = `
             <tr>
-                <td colspan="5" class="px-4 py-8 text-center">
+                <td colspan="${colspan}" class="px-4 py-8 text-center">
                     <div class="empty-state">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-12 h-12 mx-auto text-gray-400 mb-4">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -277,10 +335,26 @@ function renderizarDocumentos(data) {
     // Calcular número de fila basado en paginación
     const offset = (data.pagina - 1) * data.por_pagina;
 
-    container.innerHTML = data.documentos.map((doc, index) => `
+    // Verificar si mostrar columna de referencia (solo para cartas-nemaec)
+    const mostrarReferencia = state.categoriaActual === 'cartas-nemaec';
+
+    // Crear mapa de oficios para buscar el número del documento padre
+    const oficiosMap = {};
+    if (state.oficiosDisponibles) {
+        state.oficiosDisponibles.forEach(ofi => {
+            oficiosMap[ofi.id] = ofi.numero || `ID: ${ofi.id}`;
+        });
+    }
+
+    container.innerHTML = data.documentos.map((doc, index) => {
+        // Obtener número del oficio de referencia si existe
+        const oficioRef = doc.documento_padre_id ? (oficiosMap[doc.documento_padre_id] || '-') : '-';
+
+        return `
         <tr class="hover:bg-gray-50 transition">
             <td class="px-4 py-3 text-sm text-gray-900 font-medium cursor-pointer" onclick="verDetalle(${doc.id})">${offset + index + 1}</td>
             <td class="px-4 py-3 text-sm text-blue-600 font-medium cursor-pointer" onclick="verDetalle(${doc.id})">${doc.numero || 'Sin número'}</td>
+            ${mostrarReferencia ? `<td class="px-4 py-3 text-sm text-purple-600 cursor-pointer" onclick="verDetalle(${doc.id})" title="Oficio de referencia">${oficioRef}</td>` : ''}
             <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalle(${doc.id})">${formatearFecha(doc.fecha)}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalle(${doc.id})">${doc.asunto || 'Sin asunto'}</td>
             <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate cursor-pointer" onclick="verDetalle(${doc.id})" title="${doc.resumen || ''}">${truncarTexto(doc.resumen, 100) || '-'}</td>
@@ -294,7 +368,7 @@ function renderizarDocumentos(data) {
                 </button>
             </td>
         </tr>
-    `).join('');
+    `}).join('');
 
     // Renderizar paginación
     renderizarPaginacion(data.total, data.pagina, data.por_pagina);
@@ -377,7 +451,7 @@ async function renderizarDetalle(doc) {
     const archivoContainer = document.getElementById('det-archivo');
     if (doc.archivo_local) {
         archivoContainer.innerHTML = `
-            <a href="http://localhost:8000/uploads/${doc.archivo_local}" target="_blank"
+            <a href="${window.location.origin}/uploads/${doc.archivo_local}" target="_blank"
                class="link-documento flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -405,15 +479,18 @@ async function renderizarDetalle(doc) {
     const adjuntosContainer = document.getElementById('det-adjuntos');
     if (doc.adjuntos && doc.adjuntos.length > 0) {
         adjuntosContainer.innerHTML = doc.adjuntos.map(adj => `
-            <div class="flex items-center justify-between py-2">
-                <a href="${adj.archivo_local ? `http://localhost:8000/uploads/${adj.archivo_local}` : adj.enlace_drive}"
-                   target="_blank" class="link-documento">
-                    ${adj.nombre}
+            <div class="flex items-center gap-3 py-2 px-3 bg-gray-50 rounded-lg mb-2 hover:bg-gray-100 transition">
+                <svg class="w-5 h-5 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                </svg>
+                <a href="${adj.archivo_local ? `${window.location.origin}/uploads/${adj.archivo_local}` : adj.enlace_drive}"
+                   target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline flex-1">
+                    ${adj.nombre || adj.archivo_local || 'Adjunto'}
                 </a>
             </div>
         `).join('');
     } else {
-        adjuntosContainer.innerHTML = '<p class="text-gray-500">No hay adjuntos</p>';
+        adjuntosContainer.innerHTML = '<p class="text-gray-500 italic">No hay adjuntos</p>';
     }
 
     // Sección de respuestas (solo para documentos recibidos)
@@ -466,7 +543,7 @@ function limpiarFormulario() {
     document.getElementById('doc-enlace').value = '';
     document.getElementById('doc-archivo').value = '';
     document.getElementById('doc-padre').value = '';
-    document.getElementById('archivo-status').textContent = '';
+    document.getElementById('archivo-status').innerHTML = '';
     document.getElementById('ia-error').classList.add('hidden');
     document.getElementById('doc-whatsapp').value = '';
     document.getElementById('whatsapp-container').classList.add('hidden');
@@ -474,6 +551,9 @@ function limpiarFormulario() {
     document.getElementById('doc-oficio-referencia').value = '';
     document.getElementById('oficio-referencia-container').classList.add('hidden');
     document.getElementById('oficio-referencia-asunto').classList.add('hidden');
+    // Limpiar adjuntos
+    state.adjuntosTemporales = [];
+    document.getElementById('lista-adjuntos-form').innerHTML = '';
     state.archivoTemporal = null;
 }
 
@@ -483,7 +563,20 @@ function editarDocumento() {
 
     document.getElementById('form-titulo').textContent = 'Editar Documento';
     document.getElementById('doc-id').value = doc.id;
-    document.getElementById('doc-tipo').value = doc.tipo_documento;
+
+    // Mapear tipo_documento y direccion del backend al nuevo tipo del frontend
+    let tipoFrontend;
+    if (doc.tipo_documento === 'carta' && doc.direccion === 'enviado') {
+        tipoFrontend = 'carta-nemaec';
+    } else if (doc.tipo_documento === 'oficio') {
+        tipoFrontend = 'oficio';
+    } else if (doc.tipo_documento === 'carta' && doc.direccion === 'recibido') {
+        tipoFrontend = 'carta-recibida';
+    } else {
+        tipoFrontend = doc.tipo_documento;
+    }
+
+    document.getElementById('doc-tipo').value = tipoFrontend;
     document.getElementById('doc-direccion').value = doc.direccion;
     document.getElementById('doc-numero').value = doc.numero || '';
     document.getElementById('doc-fecha').value = doc.fecha ? doc.fecha.split('T')[0] : '';
@@ -495,8 +588,14 @@ function editarDocumento() {
     document.getElementById('doc-enlace').value = doc.enlace_drive || '';
 
     if (doc.archivo_local) {
-        document.getElementById('archivo-status').textContent = `Archivo actual: ${doc.archivo_local}`;
+        document.getElementById('archivo-status').innerHTML = `Archivo actual: <a href="${window.location.origin}/uploads/${doc.archivo_local}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${doc.archivo_local}</a>`;
     }
+
+    // Activar la lógica de cambio de tipo para mostrar/ocultar campos
+    onTipoDocumentoChange();
+
+    // Renderizar adjuntos existentes
+    renderizarAdjuntosForm();
 
     state.editando = true;
     cargarDocumentosParaPadre();
@@ -535,14 +634,35 @@ async function guardarDocumento(event) {
 
     const docId = document.getElementById('doc-id').value;
     const numeroOficio = document.getElementById('doc-numero').value || null;
+    const tipoSeleccionado = document.getElementById('doc-tipo').value;
+
+    // Mapear el tipo seleccionado a tipo_documento y direccion para el backend
+    let tipoDocumento, direccion;
+    switch (tipoSeleccionado) {
+        case 'carta-nemaec':
+            tipoDocumento = 'carta';
+            direccion = 'enviado';
+            break;
+        case 'oficio':
+            tipoDocumento = 'oficio';
+            direccion = 'recibido';
+            break;
+        case 'carta-recibida':
+            tipoDocumento = 'carta';
+            direccion = 'recibido';
+            break;
+        default:
+            tipoDocumento = tipoSeleccionado;
+            direccion = document.getElementById('doc-direccion').value;
+    }
 
     // Determinar documento padre: primero el oficio de referencia, luego el campo padre tradicional
     let documentoPadreId = document.getElementById('doc-oficio-referencia').value ||
                            document.getElementById('doc-padre').value || null;
 
     const documento = {
-        tipo_documento: document.getElementById('doc-tipo').value,
-        direccion: document.getElementById('doc-direccion').value,
+        tipo_documento: tipoDocumento,
+        direccion: direccion,
         numero: numeroOficio,
         fecha: document.getElementById('doc-fecha').value || null,
         remitente: document.getElementById('doc-remitente').value || null,
@@ -554,29 +674,107 @@ async function guardarDocumento(event) {
         documento_padre_id: documentoPadreId
     };
 
+    // Función para ir a la bandeja correspondiente según el tipo
+    function irABandejaCorrespondiente() {
+        mostrarVista('vista-bandeja');
+        state.documentoActual = null;
+        state.archivoTemporal = null;
+        state.editando = false;
+
+        switch (tipoSeleccionado) {
+            case 'carta-nemaec':
+                filtrarPorCategoria('cartas-nemaec');
+                break;
+            case 'oficio':
+                filtrarPorCategoria('oficios');
+                break;
+            case 'carta-recibida':
+                filtrarPorCategoria('cartas-recibidas');
+                break;
+            default:
+                filtrarPorCategoria('oficios');
+        }
+    }
+
     try {
         let resultado;
 
         if (docId) {
-            // Actualizar
+            // Actualizar documento existente
             resultado = await apiActualizarDocumento(docId, documento);
-            mostrarToast('Documento actualizado correctamente');
-        } else {
-            // Crear
-            resultado = await apiCrearDocumento(documento);
 
-            // Si hay archivo temporal, asociarlo
-            if (state.archivoTemporal) {
-                const archivo = document.getElementById('doc-archivo').files[0];
-                if (archivo) {
-                    await apiSubirArchivo(resultado.id, archivo);
-                }
+            // Subir adjuntos temporales si hay
+            if (state.adjuntosTemporales.length > 0) {
+                await subirAdjuntosTemporales(docId);
             }
 
-            mostrarToast('Documento creado correctamente');
-        }
+            mostrarToast('Documento actualizado correctamente');
+            irABandejaCorrespondiente();
+        } else {
+            // Verificar si ya existe un documento con el mismo número
+            let documentoExistente = null;
+            if (numeroOficio) {
+                const busqueda = await apiListarDocumentos({ busqueda: numeroOficio, por_pagina: 100 });
+                documentoExistente = busqueda.documentos.find(doc =>
+                    doc.numero && doc.numero.toLowerCase() === numeroOficio.toLowerCase()
+                );
+            }
 
-        mostrarBandeja();
+            if (documentoExistente) {
+                // Mostrar SweetAlert preguntando si desea reemplazar
+                const confirmacion = await Swal.fire({
+                    title: 'Documento ya existe',
+                    html: `Ya existe un documento con el número <strong>${numeroOficio}</strong>.<br><br>¿Desea reemplazarlo?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Sí, reemplazar',
+                    cancelButtonText: 'Cancelar'
+                });
+
+                if (confirmacion.isConfirmed) {
+                    // Actualizar el documento existente
+                    resultado = await apiActualizarDocumento(documentoExistente.id, documento);
+
+                    // Si hay archivo temporal, asociarlo
+                    if (state.archivoTemporal) {
+                        const archivo = document.getElementById('doc-archivo').files[0];
+                        if (archivo) {
+                            await apiSubirArchivo(documentoExistente.id, archivo);
+                        }
+                    }
+
+                    // Subir adjuntos temporales si hay
+                    if (state.adjuntosTemporales.length > 0) {
+                        await subirAdjuntosTemporales(documentoExistente.id);
+                    }
+
+                    mostrarToast('Documento reemplazado correctamente');
+                    irABandejaCorrespondiente();
+                }
+                // Si cancela, no hace nada y el usuario puede seguir editando
+            } else {
+                // Crear nuevo documento
+                resultado = await apiCrearDocumento(documento);
+
+                // Si hay archivo temporal, asociarlo
+                if (state.archivoTemporal) {
+                    const archivo = document.getElementById('doc-archivo').files[0];
+                    if (archivo) {
+                        await apiSubirArchivo(resultado.id, archivo);
+                    }
+                }
+
+                // Subir adjuntos temporales si hay
+                if (state.adjuntosTemporales.length > 0) {
+                    await subirAdjuntosTemporales(resultado.id);
+                }
+
+                mostrarToast('Documento creado correctamente');
+                irABandejaCorrespondiente();
+            }
+        }
     } catch (error) {
         mostrarToast('Error: ' + error.message, 'error');
     }
@@ -613,6 +811,153 @@ async function confirmarEliminar(id, numero) {
 }
 
 // ============================================
+// MANEJO DE ADJUNTOS
+// ============================================
+
+function agregarAdjuntos() {
+    const inputAdjunto = document.getElementById('nuevo-adjunto');
+    const archivos = inputAdjunto.files;
+
+    if (!archivos || archivos.length === 0) {
+        mostrarToast('Seleccione al menos un archivo para adjuntar', 'error');
+        return;
+    }
+
+    let agregados = 0;
+    let duplicados = 0;
+
+    // Procesar todos los archivos seleccionados
+    for (const archivo of archivos) {
+        // Verificar si ya existe un adjunto con el mismo nombre
+        const yaExiste = state.adjuntosTemporales.some(adj => adj.name === archivo.name);
+        if (yaExiste) {
+            duplicados++;
+            continue;
+        }
+
+        // Agregar al estado
+        state.adjuntosTemporales.push(archivo);
+        agregados++;
+    }
+
+    // Actualizar la lista visual
+    renderizarAdjuntosForm();
+
+    // Limpiar el input
+    inputAdjunto.value = '';
+
+    // Mostrar mensaje apropiado
+    if (agregados > 0 && duplicados === 0) {
+        mostrarToast(`${agregados} adjunto${agregados > 1 ? 's' : ''} agregado${agregados > 1 ? 's' : ''}`);
+    } else if (agregados > 0 && duplicados > 0) {
+        mostrarToast(`${agregados} agregado${agregados > 1 ? 's' : ''}, ${duplicados} duplicado${duplicados > 1 ? 's' : ''} omitido${duplicados > 1 ? 's' : ''}`);
+    } else if (duplicados > 0) {
+        mostrarToast('Los archivos ya están en la lista', 'error');
+    }
+}
+
+function removerAdjunto(index) {
+    state.adjuntosTemporales.splice(index, 1);
+    renderizarAdjuntosForm();
+}
+
+async function removerAdjuntoExistente(adjuntoId) {
+    const confirmacion = await Swal.fire({
+        title: '¿Eliminar adjunto?',
+        text: 'Esta acción no se puede deshacer',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if (confirmacion.isConfirmed) {
+        try {
+            await apiEliminarAdjunto(adjuntoId);
+            mostrarToast('Adjunto eliminado');
+            // Recargar el documento para actualizar la lista
+            if (state.documentoActual) {
+                const docActualizado = await apiObtenerDocumento(state.documentoActual.id);
+                state.documentoActual = docActualizado;
+                renderizarAdjuntosExistentes();
+            }
+        } catch (error) {
+            mostrarToast('Error al eliminar adjunto: ' + error.message, 'error');
+        }
+    }
+}
+
+function renderizarAdjuntosForm() {
+    const container = document.getElementById('lista-adjuntos-form');
+
+    // Renderizar adjuntos existentes (si estamos editando)
+    let htmlExistentes = '';
+    if (state.documentoActual && state.documentoActual.adjuntos && state.documentoActual.adjuntos.length > 0) {
+        htmlExistentes = '<div class="mb-3"><p class="text-sm font-medium text-gray-600 mb-2">Adjuntos guardados:</p>';
+        htmlExistentes += state.documentoActual.adjuntos.map(adj => `
+            <div class="flex items-center justify-between bg-white p-2 rounded border mb-1">
+                <a href="${adj.archivo_local ? `${window.location.origin}/uploads/${adj.archivo_local}` : adj.enlace_drive}"
+                   target="_blank" class="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                    </svg>
+                    ${adj.nombre || adj.archivo_local || 'Adjunto'}
+                </a>
+                <button type="button" onclick="removerAdjuntoExistente(${adj.id})"
+                        class="text-red-500 hover:text-red-700 p-1" title="Eliminar adjunto">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+        htmlExistentes += '</div>';
+    }
+
+    // Renderizar adjuntos temporales (nuevos)
+    let htmlTemporales = '';
+    if (state.adjuntosTemporales.length > 0) {
+        htmlTemporales = '<div><p class="text-sm font-medium text-gray-600 mb-2">Nuevos adjuntos por guardar:</p>';
+        htmlTemporales += state.adjuntosTemporales.map((archivo, index) => `
+            <div class="flex items-center justify-between bg-orange-100 p-2 rounded border border-orange-300 mb-1">
+                <span class="text-sm text-gray-700 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                    </svg>
+                    ${archivo.name}
+                </span>
+                <button type="button" onclick="removerAdjunto(${index})"
+                        class="text-red-500 hover:text-red-700 p-1" title="Quitar adjunto">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+        htmlTemporales += '</div>';
+    }
+
+    container.innerHTML = htmlExistentes + htmlTemporales;
+}
+
+function renderizarAdjuntosExistentes() {
+    renderizarAdjuntosForm();
+}
+
+async function subirAdjuntosTemporales(documentoId) {
+    for (const archivo of state.adjuntosTemporales) {
+        try {
+            await apiAgregarAdjunto(documentoId, archivo, null, archivo.name);
+        } catch (error) {
+            console.error('Error al subir adjunto:', archivo.name, error);
+        }
+    }
+    state.adjuntosTemporales = [];
+}
+
+// ============================================
 // SUBIDA DE ARCHIVOS
 // ============================================
 
@@ -634,10 +979,10 @@ async function subirArchivo() {
     try {
         const resultado = await apiSubirArchivoTemporal(archivo);
         state.archivoTemporal = resultado.archivo;
-        statusEl.textContent = `Archivo subido: ${resultado.archivo}`;
+        statusEl.innerHTML = `Archivo subido: <a href="${window.location.origin}/uploads/${resultado.archivo}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${resultado.archivo}</a>`;
         mostrarToast('Archivo subido correctamente');
     } catch (error) {
-        statusEl.textContent = 'Error al subir archivo';
+        statusEl.innerHTML = '<span class="text-red-600">Error al subir archivo</span>';
         mostrarToast('Error: ' + error.message, 'error');
     }
 }
@@ -706,10 +1051,9 @@ async function analizarConIA() {
                     document.getElementById('doc-tipo').value = 'oficio';
                     onTipoDocumentoChange();
                 } else if (resultado.numero_oficio.toLowerCase().includes('carta')) {
-                    document.getElementById('doc-tipo').value = 'carta';
-                    document.getElementById('doc-direccion').value = 'enviado';
+                    // Si es carta NEMAEC (enviada)
+                    document.getElementById('doc-tipo').value = 'carta-nemaec';
                     onTipoDocumentoChange();
-                    onDireccionChange();
                 }
             }
 
@@ -755,8 +1099,8 @@ function crearRespuesta() {
 
     limpiarFormulario();
     document.getElementById('form-titulo').textContent = 'Nueva Carta de Respuesta';
-    document.getElementById('doc-tipo').value = 'carta';
-    document.getElementById('doc-direccion').value = 'enviado';
+    document.getElementById('doc-tipo').value = 'carta-nemaec';
+    onTipoDocumentoChange();
 
     // Pre-llenar con datos del documento padre
     document.getElementById('doc-destinatario').value = docPadre.remitente || '';

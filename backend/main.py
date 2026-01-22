@@ -59,6 +59,7 @@ def listar_documentos(
     tipo_documento: Optional[str] = Query(None, description="Filtrar por tipo: oficio, carta"),
     direccion: Optional[str] = Query(None, description="Filtrar por dirección: recibido, enviado"),
     busqueda: Optional[str] = Query(None, description="Búsqueda en título, asunto, remitente, destinatario"),
+    ordenar_por: Optional[str] = Query(None, description="Ordenar por: numero, fecha"),
     pagina: int = Query(1, ge=1, description="Número de página"),
     por_pagina: int = Query(20, ge=1, le=100, description="Documentos por página"),
     db: Session = Depends(get_db)
@@ -89,14 +90,24 @@ def listar_documentos(
     # Contar total
     total = query.count()
 
-    # Aplicar paginación y ordenar por año y correlativo (más nuevos primero)
-    documentos = query.order_by(
-        Documento.anio_oficio.desc().nullslast(),
-        Documento.correlativo_oficio.desc().nullslast(),
-        Documento.created_at.desc()
-    ).offset((pagina - 1) * por_pagina)\
-        .limit(por_pagina)\
-        .all()
+    # Aplicar ordenamiento según parámetro
+    if ordenar_por == 'fecha':
+        # Ordenar por fecha del documento y luego por fecha de subida (más recientes primero)
+        documentos = query.order_by(
+            Documento.fecha.desc().nullslast(),
+            Documento.created_at.desc()
+        ).offset((pagina - 1) * por_pagina)\
+            .limit(por_pagina)\
+            .all()
+    else:
+        # Ordenar por año y correlativo (más nuevos primero) - default para oficios y cartas nemaec
+        documentos = query.order_by(
+            Documento.anio_oficio.desc().nullslast(),
+            Documento.correlativo_oficio.desc().nullslast(),
+            Documento.created_at.desc()
+        ).offset((pagina - 1) * por_pagina)\
+            .limit(por_pagina)\
+            .all()
 
     return DocumentoListResponse(
         documentos=documentos,

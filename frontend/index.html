@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestión de Correspondencia</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -45,11 +46,15 @@
                     </button>
                 </div>
                 <!-- Barra de búsqueda -->
-                <div>
+                <div class="flex gap-2">
                     <input type="text" id="filtro-busqueda"
                            placeholder="Buscar por número, asunto, remitente..."
                            onkeyup="debounce(cargarDocumentos, 300)()"
-                           class="w-full border rounded-lg px-3 py-2">
+                           class="flex-1 border rounded-lg px-3 py-2">
+                    <input type="text" id="filtro-referencia"
+                           placeholder="Filtrar por oficio de referencia..."
+                           onkeyup="debounce(cargarDocumentos, 300)()"
+                           class="flex-1 border rounded-lg px-3 py-2 hidden">
                 </div>
                 <!-- Campos ocultos para filtros -->
                 <input type="hidden" id="filtro-tipo" value="oficio">
@@ -67,7 +72,8 @@
                         <thead class="bg-gray-50 border-b">
                             <tr>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRO</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OFICIO</th>
+                                <th id="col-documento" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OFICIO</th>
+                                <th id="col-referencia" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden">OFICIO REF.</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FECHA ENVÍO</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ASUNTO</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RESUMEN</th>
@@ -96,28 +102,19 @@
                     <!-- PASO 1: Tipo de Documento -->
                     <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
                         <h3 class="font-medium text-blue-800 mb-3">Paso 1: Selecciona el tipo</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">
-                                    Tipo de Documento *
-                                </label>
-                                <select id="doc-tipo" required class="w-full border rounded-lg px-3 py-2" onchange="onTipoDocumentoChange()">
-                                    <option value="">Seleccionar...</option>
-                                    <option value="oficio">Oficio</option>
-                                    <option value="carta">Carta</option>
-                                </select>
-                            </div>
-                            <div id="direccion-container">
-                                <label class="block text-sm font-medium text-gray-700 mb-1">
-                                    Dirección *
-                                </label>
-                                <select id="doc-direccion" required class="w-full border rounded-lg px-3 py-2" onchange="onDireccionChange()">
-                                    <option value="">Seleccionar...</option>
-                                    <option value="recibido">Recibido</option>
-                                    <option value="enviado">Enviado</option>
-                                </select>
-                            </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Tipo de Documento *
+                            </label>
+                            <select id="doc-tipo" required class="w-full border rounded-lg px-3 py-2" onchange="onTipoDocumentoChange()">
+                                <option value="">Seleccionar...</option>
+                                <option value="carta-nemaec">CARTA NEMAEC</option>
+                                <option value="oficio">OFICIO</option>
+                                <option value="carta-recibida">CARTA RECIBIDA</option>
+                            </select>
                         </div>
+                        <!-- Campo oculto para dirección (se setea automáticamente) -->
+                        <input type="hidden" id="doc-direccion">
                     </div>
 
                     <!-- PASO 2: Subir PDF y Analizar -->
@@ -278,6 +275,36 @@
 
                     <!-- Campo oculto para título (usamos numero como título) -->
                     <input type="hidden" id="doc-titulo">
+
+                    <!-- PASO 4: Adjuntos -->
+                    <div class="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                        <h3 class="font-medium text-orange-800 mb-3">Paso 4: Adjuntos (opcional)</h3>
+                        <p class="text-sm text-orange-600 mb-4">Puedes agregar archivos adicionales como anexos, imágenes, etc.</p>
+
+                        <!-- Lista de adjuntos -->
+                        <div id="lista-adjuntos-form" class="mb-4 space-y-2">
+                            <!-- Los adjuntos se agregan aquí dinámicamente -->
+                        </div>
+
+                        <!-- Agregar nuevos adjuntos -->
+                        <div class="flex gap-2 items-end">
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Agregar adjuntos
+                                </label>
+                                <input type="file" id="nuevo-adjunto" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" multiple
+                                       class="w-full border rounded-lg px-3 py-2 bg-white text-sm">
+                            </div>
+                            <button type="button" onclick="agregarAdjuntos()"
+                                    class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Agregar
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">Puedes seleccionar varios archivos a la vez (Ctrl+Click). Formatos: PDF, Word, Excel, imágenes</p>
+                    </div>
 
                     <!-- Documento Padre (para respuestas) - oculto por defecto -->
                     <div id="seccion-padre" class="mb-4 hidden">

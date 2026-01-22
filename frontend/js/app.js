@@ -346,6 +346,9 @@ function renderizarDocumentos(data) {
         });
     }
 
+    // Clase para ocultar/mostrar columna de referencia
+    const claseReferencia = mostrarReferencia ? '' : 'hidden';
+
     container.innerHTML = data.documentos.map((doc, index) => {
         // Obtener número del oficio de referencia si existe
         const oficioRef = doc.documento_padre_id ? (oficiosMap[doc.documento_padre_id] || '-') : '-';
@@ -354,7 +357,7 @@ function renderizarDocumentos(data) {
         <tr class="hover:bg-gray-50 transition">
             <td class="px-4 py-3 text-sm text-gray-900 font-medium cursor-pointer" onclick="verDetalle(${doc.id})">${offset + index + 1}</td>
             <td class="px-4 py-3 text-sm text-blue-600 font-medium cursor-pointer" onclick="verDetalle(${doc.id})">${doc.numero || 'Sin número'}</td>
-            ${mostrarReferencia ? `<td class="px-4 py-3 text-sm text-purple-600 cursor-pointer" onclick="verDetalle(${doc.id})" title="Oficio de referencia">${oficioRef}</td>` : ''}
+            <td class="px-4 py-3 text-sm text-purple-600 cursor-pointer ${claseReferencia}" onclick="verDetalle(${doc.id})" title="Oficio de referencia">${oficioRef}</td>
             <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalle(${doc.id})">${formatearFecha(doc.fecha)}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalle(${doc.id})">${doc.asunto || 'Sin asunto'}</td>
             <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate cursor-pointer" onclick="verDetalle(${doc.id})" title="${doc.resumen || ''}">${truncarTexto(doc.resumen, 100) || '-'}</td>

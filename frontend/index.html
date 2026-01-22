@@ -63,9 +63,17 @@
 
             <!-- Lista de Documentos -->
             <div class="bg-white rounded-lg shadow overflow-hidden">
-                <div class="p-4 border-b">
-                    <h2 class="text-lg font-semibold text-gray-800">Bandeja de Correspondencia</h2>
-                    <p id="total-docs" class="text-sm text-gray-500">Cargando...</p>
+                <div class="p-4 border-b flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-800">Bandeja de Correspondencia</h2>
+                        <p id="total-docs" class="text-sm text-gray-500">Cargando...</p>
+                    </div>
+                    <button onclick="crearDocumentoRapido()"
+                            id="btn-crear-rapido"
+                            class="bg-green-600 hover:bg-green-700 text-white w-10 h-10 rounded-full font-bold text-2xl transition flex items-center justify-center shadow-lg"
+                            title="Crear nuevo documento">
+                        +
+                    </button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full">

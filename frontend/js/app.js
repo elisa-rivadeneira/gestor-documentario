@@ -125,6 +125,38 @@ function mostrarFormularioNuevo() {
     mostrarVista('vista-formulario');
 }
 
+function crearDocumentoRapido() {
+    limpiarFormulario();
+    state.editando = false;
+    state.archivoTemporal = null;
+
+    // Pre-seleccionar el tipo según la categoría actual
+    let tipoDocumento = '';
+    let tituloFormulario = 'Nuevo Documento';
+
+    switch (state.categoriaActual) {
+        case 'cartas-nemaec':
+            tipoDocumento = 'carta-nemaec';
+            tituloFormulario = 'Nueva Carta NEMAEC';
+            break;
+        case 'oficios':
+            tipoDocumento = 'oficio';
+            tituloFormulario = 'Nuevo Oficio';
+            break;
+        case 'cartas-recibidas':
+            tipoDocumento = 'carta-recibida';
+            tituloFormulario = 'Nueva Carta Recibida';
+            break;
+    }
+
+    document.getElementById('form-titulo').textContent = tituloFormulario;
+    document.getElementById('doc-tipo').value = tipoDocumento;
+    onTipoDocumentoChange();
+
+    cargarDocumentosParaPadre();
+    mostrarVista('vista-formulario');
+}
+
 function onTipoDocumentoChange() {
     const tipo = document.getElementById('doc-tipo').value;
     const direccionInput = document.getElementById('doc-direccion');

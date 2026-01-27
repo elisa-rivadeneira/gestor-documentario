@@ -12,6 +12,9 @@ ENV/
 *.db
 *.sqlite3
 
+# Data de producción (base de datos + uploads)
+data/
+
 # Uploads (archivos subidos por usuarios)
 uploads/*
 !uploads/.gitkeep
@@ -36,3 +39,6 @@ nul
 # Temp files
 *.tmp
 *~
+
+# Backups
+*.zip

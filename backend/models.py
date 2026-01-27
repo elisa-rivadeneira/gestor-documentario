@@ -84,3 +84,45 @@ class Usuario(Base):
     nombre = Column(String(100), nullable=False)  # Nombre completo para mostrar
     activo = Column(Integer, default=1)  # 1 = activo, 0 = inactivo
     created_at = Column(DateTime, server_default=func.now())
+
+
+class Contrato(Base):
+    """
+    Modelo para contratos institucionales.
+    Tabla independiente de documentos.
+    """
+    __tablename__ = "contratos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    numero = Column(String(50), nullable=True)
+    fecha = Column(DateTime, nullable=True)
+    contratante = Column(String(255), nullable=True)
+    contratado = Column(String(255), nullable=True)
+    item_contratado = Column(String(500), nullable=True)
+    cantidad = Column(Integer, nullable=True)
+    monto_total = Column(String(100), nullable=True)
+    asunto = Column(String(500), nullable=True)
+    resumen = Column(Text, nullable=True)
+    archivo_local = Column(String(500), nullable=True)
+    enlace_drive = Column(String(500), nullable=True)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    adjuntos = relationship("AdjuntoContrato", back_populates="contrato", cascade="all, delete-orphan")
+
+
+class AdjuntoContrato(Base):
+    """
+    Modelo para archivos adjuntos de contratos.
+    """
+    __tablename__ = "adjuntos_contrato"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contrato_id = Column(Integer, ForeignKey("contratos.id"), nullable=False)
+    nombre = Column(String(255), nullable=False)
+    enlace_drive = Column(String(500), nullable=True)
+    archivo_local = Column(String(500), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    contrato = relationship("Contrato", back_populates="adjuntos")

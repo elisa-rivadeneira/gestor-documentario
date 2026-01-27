@@ -14,7 +14,11 @@ let state = {
     editando: false,
     categoriaActual: 'oficios', // Por defecto: oficios
     oficiosDisponibles: [], // Lista de oficios para el dropdown de referencia
-    adjuntosTemporales: [] // Lista de adjuntos a subir
+    adjuntosTemporales: [], // Lista de adjuntos a subir
+    // Contratos
+    contratoActual: null,
+    archivoTemporalContrato: null,
+    adjuntosTemporalesContrato: []
 };
 
 // ============================================
@@ -121,6 +125,9 @@ function filtrarPorCategoria(categoria) {
     state.categoriaActual = categoria;
     state.paginaActual = 1;
 
+    // Restaurar headers de tabla si venimos de contratos (ANTES de buscar elementos)
+    restaurarHeadersTablaDocumentos();
+
     // Configurar filtros según la categoría
     const filtroTipo = document.getElementById('filtro-tipo');
     const filtroDireccion = document.getElementById('filtro-direccion');
@@ -162,6 +169,14 @@ function filtrarPorCategoria(categoria) {
             // Cambiar título de columna a CARTA
             colDocumento.textContent = 'CARTA';
             break;
+        case 'contratos':
+            // Contratos - usa su propio flujo
+            filtroReferencia.classList.add('hidden');
+            colReferencia.classList.add('hidden');
+            colDocumento.textContent = 'CONTRATO';
+            actualizarBotonesMenu(categoria);
+            cargarContratos();
+            return;
     }
 
     // Actualizar estilos de botones activos
@@ -172,7 +187,7 @@ function filtrarPorCategoria(categoria) {
 }
 
 function actualizarBotonesMenu(categoriaActiva) {
-    const botones = ['cartas-nemaec', 'oficios', 'cartas-recibidas'];
+    const botones = ['cartas-nemaec', 'oficios', 'cartas-recibidas', 'contratos'];
 
     botones.forEach(cat => {
         const btn = document.getElementById(`btn-${cat}`);
@@ -200,10 +215,34 @@ function mostrarBandeja() {
     state.documentoActual = null;
     state.archivoTemporal = null;
     state.editando = false;
-    cargarDocumentos();
+    state.contratoActual = null;
+    state.archivoTemporalContrato = null;
+    state.adjuntosTemporalesContrato = [];
+
+    if (state.categoriaActual === 'contratos') {
+        cargarContratos();
+    } else {
+        // Restaurar headers de tabla para documentos
+        const colDocumento = document.getElementById('col-documento');
+        if (colDocumento) {
+            switch (state.categoriaActual) {
+                case 'cartas-nemaec':
+                case 'cartas-recibidas':
+                    colDocumento.textContent = 'CARTA';
+                    break;
+                default:
+                    colDocumento.textContent = 'OFICIO';
+            }
+        }
+        cargarDocumentos();
+    }
 }
 
 function mostrarFormularioNuevo() {
+    if (state.categoriaActual === 'contratos') {
+        mostrarFormularioNuevoContrato();
+        return;
+    }
     limpiarFormulario();
     document.getElementById('form-titulo').textContent = 'Nuevo Documento';
     state.editando = false;
@@ -213,6 +252,11 @@ function mostrarFormularioNuevo() {
 }
 
 function crearDocumentoRapido() {
+    if (state.categoriaActual === 'contratos') {
+        mostrarFormularioNuevoContrato();
+        return;
+    }
+
     limpiarFormulario();
     state.editando = false;
     state.archivoTemporal = null;
@@ -485,7 +529,7 @@ function renderizarDocumentos(data) {
         const oficioRef = doc.documento_padre_id ? (oficiosMap[doc.documento_padre_id] || '-') : '-';
 
         return `
-        <tr class="hover:bg-gray-50 transition">
+        <tr class="documento-row hover:bg-gray-50">
             <td class="px-4 py-3 text-sm text-gray-900 font-medium cursor-pointer" onclick="verDetalle(${doc.id})">${offset + index + 1}</td>
             <td class="px-4 py-3 text-sm text-blue-600 font-medium cursor-pointer" onclick="verDetalle(${doc.id})">${doc.numero || 'Sin número'}</td>
             <td class="px-4 py-3 text-sm text-purple-600 cursor-pointer ${claseReferencia}" onclick="verDetalle(${doc.id})" title="Oficio de referencia">${oficioRef}</td>
@@ -550,7 +594,11 @@ function renderizarPaginacion(total, pagina, porPagina) {
 
 function irAPagina(pagina) {
     state.paginaActual = pagina;
-    cargarDocumentos();
+    if (state.categoriaActual === 'contratos') {
+        cargarContratos();
+    } else {
+        cargarDocumentos();
+    }
 }
 
 // ============================================
@@ -1304,6 +1352,493 @@ function copiarWhatsApp() {
         mostrarToast('Mensaje copiado al portapapeles');
     });
 }
+
+function buscarSegunCategoria() {
+    if (state.categoriaActual === 'contratos') {
+        cargarContratos();
+    } else {
+        cargarDocumentos();
+    }
+}
+
+function restaurarHeadersTablaDocumentos() {
+    const thead = document.querySelector('#lista-documentos')?.closest('table')?.querySelector('thead tr');
+    if (!thead) return;
+    // Solo restaurar si los headers fueron modificados (ej. por contratos)
+    const colDocumento = document.getElementById('col-documento');
+    if (!colDocumento) {
+        thead.innerHTML = `
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRO</th>
+            <th id="col-documento" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OFICIO</th>
+            <th id="col-referencia" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden">OFICIO REF.</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FECHA ENVÍO</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ASUNTO</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RESUMEN</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16"></th>
+        `;
+    }
+}
+
+// ============================================
+// CONTRATOS - CRUD COMPLETO
+// ============================================
+
+async function cargarContratos() {
+    const busqueda = document.getElementById('filtro-busqueda').value;
+
+    try {
+        const data = await apiListarContratos({
+            busqueda: busqueda,
+            pagina: state.paginaActual,
+            por_pagina: 100
+        });
+        renderizarContratos(data);
+    } catch (error) {
+        console.error('Error al cargar contratos:', error);
+        mostrarToast('Error al cargar contratos: ' + (error.message || 'Error desconocido'), 'error');
+    }
+}
+
+function renderizarContratos(data) {
+    const container = document.getElementById('lista-documentos');
+    const totalEl = document.getElementById('total-docs');
+
+    totalEl.textContent = `${data.total} contrato(s) encontrado(s)`;
+
+    // Actualizar headers de tabla para contratos
+    const thead = container.closest('table').querySelector('thead tr');
+    thead.innerHTML = `
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FECHA</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ITEM CONTRATADO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATADO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MONTO</th>
+        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16"></th>
+    `;
+
+    const esAdmin = estaAutenticado();
+
+    if (data.contratos.length === 0) {
+        container.innerHTML = `
+            <tr>
+                <td colspan="7" class="px-4 py-8 text-center">
+                    <div class="empty-state">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-12 h-12 mx-auto text-gray-400 mb-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p class="text-gray-500 mb-4">No hay contratos registrados</p>
+                        ${esAdmin ? `
+                        <button onclick="mostrarFormularioNuevoContrato()"
+                                class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg">
+                            Registrar primer contrato
+                        </button>
+                        ` : ''}
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const offset = (data.pagina - 1) * data.por_pagina;
+
+    container.innerHTML = data.contratos.map((contrato, index) => `
+        <tr class="documento-row hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm text-gray-900 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${offset + index + 1}</td>
+            <td class="px-4 py-3 text-sm text-orange-600 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.numero || 'Sin número'}</td>
+            <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearFecha(contrato.fecha)}</td>
+            <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.item_contratado || '-'}</td>
+            <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.contratado || '-'}</td>
+            <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.monto_total || '-'}</td>
+            ${esAdmin ? `
+            <td class="px-4 py-3 text-center">
+                <button onclick="confirmarEliminarContrato(${contrato.id}, '${(contrato.numero || '').replace(/'/g, "\\'")}'); event.stopPropagation();"
+                        class="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"
+                        title="Eliminar contrato">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </td>
+            ` : '<td></td>'}
+        </tr>
+    `).join('');
+
+    renderizarPaginacion(data.total, data.pagina, data.por_pagina);
+}
+
+async function verDetalleContrato(id) {
+    try {
+        const contrato = await apiObtenerContrato(id);
+        state.contratoActual = contrato;
+        renderizarDetalleContrato(contrato);
+        mostrarVista('vista-detalle-contrato');
+    } catch (error) {
+        mostrarToast('Error al cargar contrato: ' + error.message, 'error');
+    }
+}
+
+function renderizarDetalleContrato(contrato) {
+    document.getElementById('det-contrato-numero').textContent = contrato.numero || 'Sin número';
+    document.getElementById('det-contrato-fecha').textContent = contrato.fecha ? formatearFecha(contrato.fecha) : '-';
+    document.getElementById('det-contrato-contratante').textContent = contrato.contratante || '-';
+    document.getElementById('det-contrato-contratado').textContent = contrato.contratado || '-';
+    document.getElementById('det-contrato-item').textContent = contrato.item_contratado || '-';
+    document.getElementById('det-contrato-cantidad').textContent = contrato.cantidad || '-';
+    document.getElementById('det-contrato-monto').textContent = contrato.monto_total || '-';
+    document.getElementById('det-contrato-asunto').textContent = contrato.asunto || 'No especificado';
+    document.getElementById('det-contrato-resumen').textContent = contrato.resumen || 'No hay resumen disponible';
+
+    // Archivo principal
+    const archivoContainer = document.getElementById('det-contrato-archivo');
+    if (contrato.archivo_local) {
+        archivoContainer.innerHTML = `
+            <a href="${window.location.origin}/uploads/${contrato.archivo_local}" target="_blank"
+               class="link-documento flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                </svg>
+                Ver PDF
+            </a>
+        `;
+    } else if (contrato.enlace_drive) {
+        archivoContainer.innerHTML = `
+            <a href="${contrato.enlace_drive}" target="_blank"
+               class="link-documento flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
+                Ver en Google Drive
+            </a>
+        `;
+    } else {
+        archivoContainer.innerHTML = '<p class="text-gray-500">No hay documento adjunto</p>';
+    }
+
+    // Adjuntos
+    const adjuntosContainer = document.getElementById('det-contrato-adjuntos');
+    if (contrato.adjuntos && contrato.adjuntos.length > 0) {
+        adjuntosContainer.innerHTML = contrato.adjuntos.map(adj => `
+            <div class="flex items-center gap-3 py-2 px-3 bg-gray-50 rounded-lg mb-2 hover:bg-gray-100 transition">
+                <svg class="w-5 h-5 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                </svg>
+                <a href="${adj.archivo_local ? `${window.location.origin}/uploads/${adj.archivo_local}` : adj.enlace_drive}"
+                   target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline flex-1">
+                    ${adj.nombre || adj.archivo_local || 'Adjunto'}
+                </a>
+            </div>
+        `).join('');
+    } else {
+        adjuntosContainer.innerHTML = '<p class="text-gray-500 italic">No hay adjuntos</p>';
+    }
+
+    // Actualizar visibilidad de botones admin
+    actualizarUIAutenticacion();
+}
+
+function mostrarFormularioNuevoContrato() {
+    limpiarFormularioContrato();
+    document.getElementById('form-titulo-contrato').textContent = 'Nuevo Contrato';
+    state.editando = false;
+    state.archivoTemporalContrato = null;
+    state.adjuntosTemporalesContrato = [];
+    mostrarVista('vista-formulario-contrato');
+}
+
+function limpiarFormularioContrato() {
+    document.getElementById('contrato-id').value = '';
+    document.getElementById('contrato-numero').value = '';
+    document.getElementById('contrato-fecha').value = '';
+    document.getElementById('contrato-contratante').value = '';
+    document.getElementById('contrato-contratado').value = '';
+    document.getElementById('contrato-item').value = '';
+    document.getElementById('contrato-cantidad').value = '';
+    document.getElementById('contrato-monto').value = '';
+    document.getElementById('contrato-asunto').value = '';
+    document.getElementById('contrato-resumen').value = '';
+    document.getElementById('contrato-enlace').value = '';
+    document.getElementById('contrato-archivo').value = '';
+    document.getElementById('contrato-archivo-status').innerHTML = '';
+    state.archivoTemporalContrato = null;
+    state.adjuntosTemporalesContrato = [];
+    document.getElementById('lista-adjuntos-contrato-form').innerHTML = '';
+}
+
+function editarContrato() {
+    const contrato = state.contratoActual;
+    if (!contrato) return;
+
+    document.getElementById('form-titulo-contrato').textContent = 'Editar Contrato';
+    document.getElementById('contrato-id').value = contrato.id;
+    document.getElementById('contrato-numero').value = contrato.numero || '';
+    document.getElementById('contrato-fecha').value = contrato.fecha ? contrato.fecha.split('T')[0] : '';
+    document.getElementById('contrato-contratante').value = contrato.contratante || '';
+    document.getElementById('contrato-contratado').value = contrato.contratado || '';
+    document.getElementById('contrato-item').value = contrato.item_contratado || '';
+    document.getElementById('contrato-cantidad').value = contrato.cantidad || '';
+    document.getElementById('contrato-monto').value = contrato.monto_total || '';
+    document.getElementById('contrato-asunto').value = contrato.asunto || '';
+    document.getElementById('contrato-resumen').value = contrato.resumen || '';
+    document.getElementById('contrato-enlace').value = contrato.enlace_drive || '';
+
+    if (contrato.archivo_local) {
+        document.getElementById('contrato-archivo-status').innerHTML = `Archivo actual: <a href="${window.location.origin}/uploads/${contrato.archivo_local}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${contrato.archivo_local}</a>`;
+    }
+
+    state.editando = true;
+    state.adjuntosTemporalesContrato = [];
+    renderizarAdjuntosContratoForm();
+    mostrarVista('vista-formulario-contrato');
+}
+
+async function guardarContrato(event) {
+    event.preventDefault();
+
+    const contratoId = document.getElementById('contrato-id').value;
+
+    const contrato = {
+        numero: document.getElementById('contrato-numero').value || null,
+        fecha: document.getElementById('contrato-fecha').value || null,
+        contratante: document.getElementById('contrato-contratante').value || null,
+        contratado: document.getElementById('contrato-contratado').value || null,
+        item_contratado: document.getElementById('contrato-item').value || null,
+        cantidad: document.getElementById('contrato-cantidad').value ? parseInt(document.getElementById('contrato-cantidad').value) : null,
+        monto_total: document.getElementById('contrato-monto').value || null,
+        asunto: document.getElementById('contrato-asunto').value || null,
+        resumen: document.getElementById('contrato-resumen').value || null,
+        enlace_drive: document.getElementById('contrato-enlace').value || null
+    };
+
+    try {
+        let resultado;
+
+        if (contratoId) {
+            resultado = await apiActualizarContrato(contratoId, contrato);
+
+            if (state.adjuntosTemporalesContrato.length > 0) {
+                await subirAdjuntosTemporalesContrato(contratoId);
+            }
+
+            mostrarToast('Contrato actualizado correctamente');
+        } else {
+            resultado = await apiCrearContrato(contrato);
+
+            if (state.archivoTemporalContrato) {
+                await apiAsociarArchivoContrato(resultado.id, state.archivoTemporalContrato);
+            }
+
+            if (state.adjuntosTemporalesContrato.length > 0) {
+                await subirAdjuntosTemporalesContrato(resultado.id);
+            }
+
+            mostrarToast('Contrato creado correctamente');
+        }
+
+        mostrarVista('vista-bandeja');
+        state.contratoActual = null;
+        state.archivoTemporalContrato = null;
+        state.editando = false;
+        state.adjuntosTemporalesContrato = [];
+        filtrarPorCategoria('contratos');
+    } catch (error) {
+        mostrarToast('Error: ' + error.message, 'error');
+    }
+}
+
+async function subirArchivoContrato() {
+    const archivo = document.getElementById('contrato-archivo').files[0];
+    if (!archivo) {
+        mostrarToast('Seleccione un archivo PDF', 'error');
+        return;
+    }
+
+    if (!archivo.name.toLowerCase().endsWith('.pdf')) {
+        mostrarToast('Solo se permiten archivos PDF', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('contrato-archivo-status');
+    statusEl.textContent = 'Subiendo archivo...';
+
+    try {
+        const resultado = await apiSubirArchivoTemporal(archivo);
+        state.archivoTemporalContrato = resultado.archivo;
+        statusEl.innerHTML = `Archivo subido: <a href="${window.location.origin}/uploads/${resultado.archivo}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${resultado.archivo}</a>`;
+        mostrarToast('Archivo subido correctamente');
+    } catch (error) {
+        statusEl.innerHTML = '<span class="text-red-600">Error al subir archivo</span>';
+        mostrarToast('Error: ' + error.message, 'error');
+    }
+}
+
+async function eliminarContratoDetalle() {
+    if (!state.contratoActual) return;
+
+    if (!confirm('¿Está seguro de eliminar este contrato?')) return;
+
+    try {
+        await apiEliminarContrato(state.contratoActual.id);
+        mostrarToast('Contrato eliminado');
+        mostrarBandeja();
+    } catch (error) {
+        mostrarToast('Error al eliminar: ' + error.message, 'error');
+    }
+}
+
+async function confirmarEliminarContrato(id, numero) {
+    const mensaje = numero
+        ? `¿Está seguro de querer borrar el contrato ${numero}?`
+        : '¿Está seguro de querer borrar este contrato?';
+
+    if (!confirm(mensaje)) return;
+
+    try {
+        await apiEliminarContrato(id);
+        mostrarToast('Contrato eliminado correctamente');
+        cargarContratos();
+    } catch (error) {
+        mostrarToast('Error al eliminar: ' + error.message, 'error');
+    }
+}
+
+// --- Adjuntos de contrato ---
+
+function agregarAdjuntosContrato() {
+    const inputAdjunto = document.getElementById('nuevo-adjunto-contrato');
+    const archivos = inputAdjunto.files;
+
+    if (!archivos || archivos.length === 0) {
+        mostrarToast('Seleccione al menos un archivo para adjuntar', 'error');
+        return;
+    }
+
+    let agregados = 0;
+    let duplicados = 0;
+
+    for (const archivo of archivos) {
+        const yaExiste = state.adjuntosTemporalesContrato.some(adj => adj.name === archivo.name);
+        if (yaExiste) {
+            duplicados++;
+            continue;
+        }
+        state.adjuntosTemporalesContrato.push(archivo);
+        agregados++;
+    }
+
+    renderizarAdjuntosContratoForm();
+    inputAdjunto.value = '';
+
+    if (agregados > 0 && duplicados === 0) {
+        mostrarToast(`${agregados} adjunto${agregados > 1 ? 's' : ''} agregado${agregados > 1 ? 's' : ''}`);
+    } else if (agregados > 0 && duplicados > 0) {
+        mostrarToast(`${agregados} agregado${agregados > 1 ? 's' : ''}, ${duplicados} duplicado${duplicados > 1 ? 's' : ''} omitido${duplicados > 1 ? 's' : ''}`);
+    } else if (duplicados > 0) {
+        mostrarToast('Los archivos ya están en la lista', 'error');
+    }
+}
+
+function removerAdjuntoContrato(index) {
+    state.adjuntosTemporalesContrato.splice(index, 1);
+    renderizarAdjuntosContratoForm();
+}
+
+async function removerAdjuntoContratoExistente(adjuntoId) {
+    const confirmacion = await Swal.fire({
+        title: '¿Eliminar adjunto?',
+        text: 'Esta acción no se puede deshacer',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if (confirmacion.isConfirmed) {
+        try {
+            await apiEliminarAdjuntoContrato(adjuntoId);
+            mostrarToast('Adjunto eliminado');
+            if (state.contratoActual) {
+                const contratoActualizado = await apiObtenerContrato(state.contratoActual.id);
+                state.contratoActual = contratoActualizado;
+                renderizarAdjuntosContratoForm();
+            }
+        } catch (error) {
+            mostrarToast('Error al eliminar adjunto: ' + error.message, 'error');
+        }
+    }
+}
+
+function renderizarAdjuntosContratoForm() {
+    const container = document.getElementById('lista-adjuntos-contrato-form');
+
+    let htmlExistentes = '';
+    if (state.contratoActual && state.contratoActual.adjuntos && state.contratoActual.adjuntos.length > 0) {
+        htmlExistentes = '<div class="mb-3"><p class="text-sm font-medium text-gray-600 mb-2">Adjuntos guardados:</p>';
+        htmlExistentes += state.contratoActual.adjuntos.map(adj => `
+            <div class="flex items-center justify-between bg-white p-2 rounded border mb-1">
+                <a href="${adj.archivo_local ? `${window.location.origin}/uploads/${adj.archivo_local}` : adj.enlace_drive}"
+                   target="_blank" class="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                    </svg>
+                    ${adj.nombre || adj.archivo_local || 'Adjunto'}
+                </a>
+                <button type="button" onclick="removerAdjuntoContratoExistente(${adj.id})"
+                        class="text-red-500 hover:text-red-700 p-1" title="Eliminar adjunto">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+        htmlExistentes += '</div>';
+    }
+
+    let htmlTemporales = '';
+    if (state.adjuntosTemporalesContrato.length > 0) {
+        htmlTemporales = '<div><p class="text-sm font-medium text-gray-600 mb-2">Nuevos adjuntos por guardar:</p>';
+        htmlTemporales += state.adjuntosTemporalesContrato.map((archivo, index) => `
+            <div class="flex items-center justify-between bg-orange-100 p-2 rounded border border-orange-300 mb-1">
+                <span class="text-sm text-gray-700 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                    </svg>
+                    ${archivo.name}
+                </span>
+                <button type="button" onclick="removerAdjuntoContrato(${index})"
+                        class="text-red-500 hover:text-red-700 p-1" title="Quitar adjunto">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+        htmlTemporales += '</div>';
+    }
+
+    container.innerHTML = htmlExistentes + htmlTemporales;
+}
+
+async function subirAdjuntosTemporalesContrato(contratoId) {
+    for (const archivo of state.adjuntosTemporalesContrato) {
+        try {
+            await apiAgregarAdjuntoContrato(contratoId, archivo, null, archivo.name);
+        } catch (error) {
+            console.error('Error al subir adjunto de contrato:', archivo.name, error);
+        }
+    }
+    state.adjuntosTemporalesContrato = [];
+}
+
+// ============================================
+// FIN CONTRATOS
+// ============================================
 
 // Debounce para búsqueda
 function debounce(func, wait) {

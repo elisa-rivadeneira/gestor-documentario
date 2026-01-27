@@ -49,23 +49,39 @@
                 <!-- Botones de categoría -->
                 <div class="flex flex-wrap gap-3 mb-4">
                     <button id="btn-cartas-nemaec" onclick="filtrarPorCategoria('cartas-nemaec')"
-                            class="menu-btn menu-btn-nemaec flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition text-center">
+                            class="menu-btn menu-btn-nemaec flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                        </svg>
                         CARTAS NEMAEC
                     </button>
                     <button id="btn-oficios" onclick="filtrarPorCategoria('oficios')"
-                            class="menu-btn menu-btn-oficios flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition text-center">
+                            class="menu-btn menu-btn-oficios flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
                         OFICIOS
                     </button>
                     <button id="btn-cartas-recibidas" onclick="filtrarPorCategoria('cartas-recibidas')"
-                            class="menu-btn menu-btn-recibidas flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition text-center">
+                            class="menu-btn menu-btn-recibidas flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
                         CARTAS RECIBIDAS
+                    </button>
+                    <button id="btn-contratos" onclick="filtrarPorCategoria('contratos')"
+                            class="menu-btn menu-btn-contratos flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                        </svg>
+                        CONTRATOS
                     </button>
                 </div>
                 <!-- Barra de búsqueda -->
                 <div class="flex gap-2">
                     <input type="text" id="filtro-busqueda"
                            placeholder="Buscar por número, asunto, remitente..."
-                           onkeyup="debounce(cargarDocumentos, 300)()"
+                           onkeyup="debounce(buscarSegunCategoria, 300)()"
                            class="flex-1 border rounded-lg px-3 py-2">
                     <input type="text" id="filtro-referencia"
                            placeholder="Filtrar por oficio de referencia..."
@@ -446,6 +462,219 @@
                     <div id="lista-respuestas"></div>
                 </div>
 
+            </div>
+        </div>
+
+        <!-- Vista: Formulario Nuevo/Editar Contrato -->
+        <div id="vista-formulario-contrato" class="vista hidden">
+            <div class="max-w-3xl mx-auto mb-4">
+                <button onclick="mostrarBandeja()" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    <span>Volver</span>
+                </button>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6 max-w-3xl mx-auto">
+                <h2 id="form-titulo-contrato" class="text-xl font-bold text-gray-800 mb-6">Nuevo Contrato</h2>
+
+                <form id="form-contrato" onsubmit="guardarContrato(event)">
+                    <input type="hidden" id="contrato-id">
+
+                    <!-- Datos del contrato -->
+                    <div class="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                        <h3 class="font-medium text-orange-800 mb-3">Datos del Contrato</h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Número de Contrato</label>
+                                <input type="text" id="contrato-numero" placeholder="Ej: CONT-001-2026"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                                <input type="date" id="contrato-fecha" class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Contratante</label>
+                                <input type="text" id="contrato-contratante" placeholder="Entidad contratante"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Contratado</label>
+                                <input type="text" id="contrato-contratado" placeholder="Persona o empresa contratada"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Item Contratado</label>
+                            <input type="text" id="contrato-item" placeholder="Descripción del item o servicio"
+                                   class="w-full border rounded-lg px-3 py-2 bg-white">
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
+                                <input type="number" id="contrato-cantidad" placeholder="0" min="0"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Monto Total</label>
+                                <input type="text" id="contrato-monto" placeholder="Ej: S/ 10,000.00"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Asunto</label>
+                            <input type="text" id="contrato-asunto" placeholder="Asunto del contrato"
+                                   class="w-full border rounded-lg px-3 py-2 bg-white">
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Resumen</label>
+                            <textarea id="contrato-resumen" rows="3" placeholder="Resumen del contrato"
+                                      class="w-full border rounded-lg px-3 py-2 bg-white"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Archivo PDF -->
+                    <div class="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                        <h3 class="font-medium text-purple-800 mb-3">Documento PDF</h3>
+                        <div class="mb-4">
+                            <div class="flex gap-2">
+                                <input type="file" id="contrato-archivo" accept=".pdf"
+                                       class="flex-1 border rounded-lg px-3 py-2 bg-white">
+                                <button type="button" onclick="subirArchivoContrato()"
+                                        class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg">
+                                    Subir
+                                </button>
+                            </div>
+                            <p id="contrato-archivo-status" class="text-sm text-gray-500 mt-1"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">O enlace de Google Drive</label>
+                            <input type="url" id="contrato-enlace" placeholder="https://drive.google.com/..."
+                                   class="w-full border rounded-lg px-3 py-2 bg-white">
+                        </div>
+                    </div>
+
+                    <!-- Adjuntos -->
+                    <div class="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                        <h3 class="font-medium text-orange-800 mb-3">Adjuntos (opcional)</h3>
+                        <div id="lista-adjuntos-contrato-form" class="mb-4 space-y-2"></div>
+                        <div class="flex gap-2 items-end">
+                            <div class="flex-1">
+                                <input type="file" id="nuevo-adjunto-contrato" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" multiple
+                                       class="w-full border rounded-lg px-3 py-2 bg-white text-sm">
+                            </div>
+                            <button type="button" onclick="agregarAdjuntosContrato()"
+                                    class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Agregar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Botones -->
+                    <div class="flex gap-4">
+                        <button type="submit"
+                                class="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition">
+                            Guardar Contrato
+                        </button>
+                        <button type="button" onclick="mostrarBandeja()"
+                                class="px-6 bg-gray-300 hover:bg-gray-400 text-gray-800 py-3 rounded-lg font-medium transition">
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Vista: Detalle de Contrato -->
+        <div id="vista-detalle-contrato" class="vista hidden">
+            <div class="max-w-3xl mx-auto">
+                <div class="mb-4">
+                    <button onclick="mostrarBandeja()" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        <span>Volver</span>
+                    </button>
+                </div>
+
+                <!-- Cabecera -->
+                <div class="bg-white rounded-lg shadow p-6 mb-4">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <span class="inline-block px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800 mb-2">
+                                Contrato
+                            </span>
+                            <h2 id="det-contrato-numero" class="text-2xl font-bold text-gray-800"></h2>
+                        </div>
+                        <div id="det-contrato-botones-admin" class="admin-only hidden flex gap-2">
+                            <button onclick="editarContrato()"
+                                    class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg">
+                                Editar
+                            </button>
+                            <button onclick="eliminarContratoDetalle()"
+                                    class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg">
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                            <span class="text-gray-500">Fecha:</span>
+                            <p id="det-contrato-fecha" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Contratante:</span>
+                            <p id="det-contrato-contratante" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Contratado:</span>
+                            <p id="det-contrato-contratado" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Item:</span>
+                            <p id="det-contrato-item" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Cantidad:</span>
+                            <p id="det-contrato-cantidad" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">Monto Total:</span>
+                            <p id="det-contrato-monto" class="font-medium"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Asunto y Resumen -->
+                <div class="bg-white rounded-lg shadow p-6 mb-4">
+                    <h3 class="font-semibold text-gray-700 mb-2">Asunto</h3>
+                    <p id="det-contrato-asunto" class="text-gray-800 mb-4"></p>
+
+                    <h3 class="font-semibold text-gray-700 mb-2">Resumen</h3>
+                    <p id="det-contrato-resumen" class="text-gray-800 whitespace-pre-line"></p>
+                </div>
+
+                <!-- Archivos -->
+                <div class="bg-white rounded-lg shadow p-6 mb-4">
+                    <h3 class="font-semibold text-gray-700 mb-3">Documento Principal</h3>
+                    <div id="det-contrato-archivo" class="mb-4"></div>
+
+                    <h3 class="font-semibold text-gray-700 mb-3">Adjuntos</h3>
+                    <div id="det-contrato-adjuntos"></div>
+                </div>
             </div>
         </div>
 

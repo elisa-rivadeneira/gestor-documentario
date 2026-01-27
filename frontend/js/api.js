@@ -309,6 +309,96 @@ async function apiEliminarAdjunto(adjuntoId) {
 }
 
 // ============================================
+// CONTRATOS
+// ============================================
+
+/**
+ * Lista contratos con filtros opcionales
+ */
+async function apiListarContratos(filtros = {}) {
+    const params = new URLSearchParams();
+    if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+    if (filtros.pagina) params.append('pagina', filtros.pagina);
+    if (filtros.por_pagina) params.append('por_pagina', filtros.por_pagina);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return await fetchAPI(`/contratos${query}`);
+}
+
+/**
+ * Obtiene un contrato por ID
+ */
+async function apiObtenerContrato(id) {
+    return await fetchAPI(`/contratos/${id}`);
+}
+
+/**
+ * Crea un nuevo contrato
+ */
+async function apiCrearContrato(contrato) {
+    return await fetchAPI('/contratos', {
+        method: 'POST',
+        body: JSON.stringify(contrato),
+    });
+}
+
+/**
+ * Actualiza un contrato existente
+ */
+async function apiActualizarContrato(id, contrato) {
+    return await fetchAPI(`/contratos/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(contrato),
+    });
+}
+
+/**
+ * Elimina un contrato
+ */
+async function apiEliminarContrato(id) {
+    return await fetchAPI(`/contratos/${id}`, {
+        method: 'DELETE',
+    });
+}
+
+/**
+ * Asocia un archivo temporal a un contrato
+ */
+async function apiAsociarArchivoContrato(contratoId, nombreTemporal) {
+    return await fetchAPI(`/contratos/${contratoId}/asociar-archivo?nombre_temporal=${encodeURIComponent(nombreTemporal)}`, {
+        method: 'POST',
+    });
+}
+
+/**
+ * Agrega un adjunto a un contrato
+ */
+async function apiAgregarAdjuntoContrato(contratoId, archivo, enlaceDrive, nombre) {
+    const formData = new FormData();
+    if (archivo) formData.append('archivo', archivo);
+
+    const params = new URLSearchParams();
+    if (enlaceDrive) params.append('enlace_drive', enlaceDrive);
+    if (nombre) params.append('nombre', nombre);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    return await fetchAPI(`/contratos/${contratoId}/adjuntos${query}`, {
+        method: 'POST',
+        body: archivo ? formData : undefined,
+    });
+}
+
+/**
+ * Elimina un adjunto de contrato
+ */
+async function apiEliminarAdjuntoContrato(adjuntoId) {
+    return await fetchAPI(`/adjuntos-contrato/${adjuntoId}`, {
+        method: 'DELETE',
+    });
+}
+
+// ============================================
 // UTILIDADES
 // ============================================
 

@@ -36,9 +36,17 @@
     color: #92400e;
 }
 
-/* Hover en filas de documentos */
+/* Hover en filas de documentos - efecto 3D tipo Gmail */
+.documento-row {
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
 .documento-row:hover {
     background-color: #f9fafb;
+    transform: translateY(-2px);
+    box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.12);
+    position: relative;
+    z-index: 1;
 }
 
 /* Toast animations */
@@ -175,4 +183,22 @@
     color: white;
     border-color: #15803d;
     box-shadow: 0 4px 6px -1px rgba(22, 163, 74, 0.4);
+}
+
+/* CONTRATOS - Naranja/Orange */
+.menu-btn-contratos {
+    background-color: #fff7ed;
+    color: #9a3412;
+    border-color: #fdba74;
+}
+
+.menu-btn-contratos:hover {
+    background-color: #fed7aa;
+}
+
+.menu-btn-contratos.active {
+    background-color: #ea580c;
+    color: white;
+    border-color: #c2410c;
+    box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.4);
 }

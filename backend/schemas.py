@@ -151,3 +151,78 @@ class UsuarioResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# === Schemas para Adjuntos de Contrato ===
+
+class AdjuntoContratoBase(BaseModel):
+    nombre: str
+    enlace_drive: Optional[str] = None
+    archivo_local: Optional[str] = None
+
+
+class AdjuntoContratoCreate(AdjuntoContratoBase):
+    pass
+
+
+class AdjuntoContratoResponse(AdjuntoContratoBase):
+    id: int
+    contrato_id: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# === Schemas para Contratos ===
+
+class ContratoBase(BaseModel):
+    numero: Optional[str] = None
+    fecha: Optional[datetime] = None
+    contratante: Optional[str] = None
+    contratado: Optional[str] = None
+    item_contratado: Optional[str] = None
+    cantidad: Optional[int] = None
+    monto_total: Optional[str] = None
+    asunto: Optional[str] = None
+    resumen: Optional[str] = None
+    enlace_drive: Optional[str] = None
+
+
+class ContratoCreate(ContratoBase):
+    """Schema para crear un nuevo contrato"""
+    pass
+
+
+class ContratoUpdate(BaseModel):
+    """Schema para actualizar un contrato existente"""
+    numero: Optional[str] = None
+    fecha: Optional[datetime] = None
+    contratante: Optional[str] = None
+    contratado: Optional[str] = None
+    item_contratado: Optional[str] = None
+    cantidad: Optional[int] = None
+    monto_total: Optional[str] = None
+    asunto: Optional[str] = None
+    resumen: Optional[str] = None
+    enlace_drive: Optional[str] = None
+
+
+class ContratoResponse(ContratoBase):
+    """Schema para respuesta de contrato"""
+    id: int
+    archivo_local: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    adjuntos: List[AdjuntoContratoResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ContratoListResponse(BaseModel):
+    """Schema para lista de contratos con paginación"""
+    contratos: List[ContratoResponse]
+    total: int
+    pagina: int
+    por_pagina: int

@@ -16,11 +16,13 @@ from sqlalchemy import or_
 import pdfplumber
 
 from database import engine, get_db, Base
-from models import Documento, Adjunto, Usuario
+from models import Documento, Adjunto, Usuario, Contrato, AdjuntoContrato
 from schemas import (
     DocumentoCreate, DocumentoUpdate, DocumentoResponse, DocumentoListResponse,
     AdjuntoCreate, AdjuntoResponse, AnalisisIARequest, AnalisisIAResponse,
-    LoginRequest, LoginResponse, UsuarioResponse
+    LoginRequest, LoginResponse, UsuarioResponse,
+    ContratoCreate, ContratoUpdate, ContratoResponse, ContratoListResponse,
+    AdjuntoContratoResponse
 )
 from services.ia_service import ia_service, extraer_numero_con_ocr, OCR_DISPONIBLE
 from services.auth_service import hash_password, verify_password, create_token, verify_token
@@ -626,6 +628,214 @@ def eliminar_adjunto(
         raise HTTPException(status_code=404, detail="Adjunto no encontrado")
 
     # Eliminar archivo si existe
+    if adjunto.archivo_local:
+        ruta = os.path.join(UPLOAD_DIR, adjunto.archivo_local)
+        if os.path.exists(ruta):
+            os.remove(ruta)
+
+    db.delete(adjunto)
+    db.commit()
+    return None
+
+
+# ============================================
+# ENDPOINTS DE CONTRATOS
+# ============================================
+
+@app.get("/api/contratos", response_model=ContratoListResponse)
+def listar_contratos(
+    busqueda: Optional[str] = Query(None, description="Búsqueda en contratante, contratado, item, asunto, número"),
+    pagina: int = Query(1, ge=1),
+    por_pagina: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Lista contratos con búsqueda opcional y paginación."""
+    query = db.query(Contrato)
+
+    if busqueda:
+        busqueda_like = f"%{busqueda}%"
+        query = query.filter(
+            or_(
+                Contrato.contratante.ilike(busqueda_like),
+                Contrato.contratado.ilike(busqueda_like),
+                Contrato.item_contratado.ilike(busqueda_like),
+                Contrato.asunto.ilike(busqueda_like),
+                Contrato.numero.ilike(busqueda_like)
+            )
+        )
+
+    total = query.count()
+    contratos = query.order_by(Contrato.created_at.desc())\
+        .offset((pagina - 1) * por_pagina)\
+        .limit(por_pagina)\
+        .all()
+
+    return ContratoListResponse(
+        contratos=contratos,
+        total=total,
+        pagina=pagina,
+        por_pagina=por_pagina
+    )
+
+
+@app.post("/api/contratos", response_model=ContratoResponse, status_code=201)
+def crear_contrato(
+    contrato: ContratoCreate,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Crea un nuevo contrato. Requiere autenticación."""
+    db_contrato = Contrato(**contrato.model_dump())
+    db.add(db_contrato)
+    db.commit()
+    db.refresh(db_contrato)
+    return db_contrato
+
+
+@app.get("/api/contratos/{contrato_id}", response_model=ContratoResponse)
+def obtener_contrato(contrato_id: int, db: Session = Depends(get_db)):
+    """Obtiene un contrato por su ID con todos sus adjuntos."""
+    contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+    return contrato
+
+
+@app.put("/api/contratos/{contrato_id}", response_model=ContratoResponse)
+def actualizar_contrato(
+    contrato_id: int,
+    contrato_update: ContratoUpdate,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Actualiza un contrato existente. Requiere autenticación."""
+    contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+
+    update_data = contrato_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(contrato, field, value)
+
+    contrato.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(contrato)
+    return contrato
+
+
+@app.delete("/api/contratos/{contrato_id}", status_code=204)
+def eliminar_contrato(
+    contrato_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Elimina un contrato y sus adjuntos. Requiere autenticación."""
+    contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+
+    if contrato.archivo_local:
+        archivo_path = os.path.join(UPLOAD_DIR, contrato.archivo_local)
+        if os.path.exists(archivo_path):
+            os.remove(archivo_path)
+
+    # Eliminar archivos de adjuntos
+    for adj in contrato.adjuntos:
+        if adj.archivo_local:
+            ruta = os.path.join(UPLOAD_DIR, adj.archivo_local)
+            if os.path.exists(ruta):
+                os.remove(ruta)
+
+    db.delete(contrato)
+    db.commit()
+    return None
+
+
+@app.post("/api/contratos/{contrato_id}/asociar-archivo")
+async def asociar_archivo_contrato(
+    contrato_id: int,
+    nombre_temporal: str = Query(..., description="Nombre del archivo temporal a asociar"),
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Asocia un archivo temporal ya subido a un contrato."""
+    contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+
+    ruta_temporal = os.path.join(UPLOAD_DIR, nombre_temporal)
+    if not os.path.exists(ruta_temporal):
+        raise HTTPException(status_code=404, detail="Archivo temporal no encontrado")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    partes = nombre_temporal.split('_', 3)
+    nombre_original = partes[3] if len(partes) > 3 else nombre_temporal
+    nuevo_nombre = f"contrato_{contrato_id}_{timestamp}_{nombre_original}"
+    ruta_nueva = os.path.join(UPLOAD_DIR, nuevo_nombre)
+
+    os.rename(ruta_temporal, ruta_nueva)
+
+    contrato.archivo_local = nuevo_nombre
+    contrato.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "mensaje": "Archivo asociado exitosamente",
+        "archivo": nuevo_nombre,
+        "ruta": f"/uploads/{nuevo_nombre}"
+    }
+
+
+@app.post("/api/contratos/{contrato_id}/adjuntos", response_model=AdjuntoContratoResponse)
+async def agregar_adjunto_contrato(
+    contrato_id: int,
+    archivo: UploadFile = File(None),
+    enlace_drive: str = Query(None),
+    nombre: str = Query(None),
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Agrega un adjunto a un contrato (archivo o enlace Drive)."""
+    contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+
+    adjunto_data = {"contrato_id": contrato_id}
+
+    if archivo:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_archivo = f"adj_contrato_{contrato_id}_{timestamp}_{archivo.filename}"
+        ruta_archivo = os.path.join(UPLOAD_DIR, nombre_archivo)
+
+        with open(ruta_archivo, "wb") as buffer:
+            shutil.copyfileobj(archivo.file, buffer)
+
+        adjunto_data["archivo_local"] = nombre_archivo
+        adjunto_data["nombre"] = nombre or archivo.filename
+    elif enlace_drive:
+        adjunto_data["enlace_drive"] = enlace_drive
+        adjunto_data["nombre"] = nombre or "Enlace Drive"
+    else:
+        raise HTTPException(status_code=400, detail="Se requiere archivo o enlace Drive")
+
+    adjunto = AdjuntoContrato(**adjunto_data)
+    db.add(adjunto)
+    db.commit()
+    db.refresh(adjunto)
+    return adjunto
+
+
+@app.delete("/api/adjuntos-contrato/{adjunto_id}", status_code=204)
+def eliminar_adjunto_contrato(
+    adjunto_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Elimina un adjunto de contrato."""
+    adjunto = db.query(AdjuntoContrato).filter(AdjuntoContrato.id == adjunto_id).first()
+    if not adjunto:
+        raise HTTPException(status_code=404, detail="Adjunto no encontrado")
+
     if adjunto.archivo_local:
         ruta = os.path.join(UPLOAD_DIR, adjunto.archivo_local)
         if os.path.exists(ruta):

@@ -23,9 +23,6 @@ COPY backend/ ./backend/
 # Copiar frontend
 COPY frontend/ ./frontend/
 
-# Copiar base de datos como inicial (solo se usa si el volumen está vacío)
-COPY correspondencia.db ./correspondencia.db.initial
-
 # Crear directorios necesarios
 RUN mkdir -p /data/uploads
 

@@ -1088,6 +1088,14 @@ if os.path.exists(FRONTEND_DIR):
     app.mount("/css", StaticFiles(directory=os.path.join(FRONTEND_DIR, "css")), name="css")
     app.mount("/js", StaticFiles(directory=os.path.join(FRONTEND_DIR, "js")), name="js")
 
+@app.get("/favicon.ico")
+async def serve_favicon():
+    """Servir el favicon"""
+    favicon_path = os.path.join(FRONTEND_DIR, "favicon.ico")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/x-icon")
+    return None
+
 @app.get("/")
 async def serve_frontend():
     """Servir el frontend"""

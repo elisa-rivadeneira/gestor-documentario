@@ -96,8 +96,10 @@ class Contrato(Base):
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(String(50), nullable=True)
     fecha = Column(DateTime, nullable=True)
+    tipo_contrato = Column(String(20), nullable=True)  # equipamiento, mantenimiento
     contratante = Column(String(255), nullable=True)
-    contratado = Column(String(255), nullable=True)
+    ruc_contratado = Column(String(11), nullable=True)  # RUC del contratado
+    contratado = Column(String(255), nullable=True)  # Razón social del contratado
     item_contratado = Column(String(500), nullable=True)
     cantidad = Column(Integer, nullable=True)
     monto_total = Column(String(100), nullable=True)

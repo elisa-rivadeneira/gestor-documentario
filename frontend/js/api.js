@@ -318,6 +318,7 @@ async function apiEliminarAdjunto(adjuntoId) {
 async function apiListarContratos(filtros = {}) {
     const params = new URLSearchParams();
     if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+    if (filtros.tipo_contrato) params.append('tipo_contrato', filtros.tipo_contrato);
     if (filtros.pagina) params.append('pagina', filtros.pagina);
     if (filtros.por_pagina) params.append('por_pagina', filtros.por_pagina);
 
@@ -396,6 +397,13 @@ async function apiEliminarAdjuntoContrato(adjuntoId) {
     return await fetchAPI(`/adjuntos-contrato/${adjuntoId}`, {
         method: 'DELETE',
     });
+}
+
+/**
+ * Consulta la razón social de un RUC en SUNAT
+ */
+async function apiConsultarRUC(ruc) {
+    return await fetchAPI(`/consultar-ruc/${ruc}`);
 }
 
 // ============================================

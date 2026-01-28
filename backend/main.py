@@ -31,6 +31,41 @@ from init_users import crear_usuarios_iniciales
 # Crear tablas en la base de datos
 Base.metadata.create_all(bind=engine)
 
+# Migración: agregar columnas nuevas a contratos si no existen
+def migrar_contratos():
+    """Agrega columnas nuevas a la tabla contratos si no existen.
+    - ruc_contratado: NULL por defecto (campo nuevo)
+    - tipo_contrato: 'mantenimiento' por defecto para registros existentes
+    """
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            # Verificar columnas existentes
+            result = conn.execute(text("PRAGMA table_info(contratos)"))
+            columnas = [row[1] for row in result.fetchall()]
+
+            # Agregar columna ruc_contratado (NULL por defecto)
+            if 'ruc_contratado' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN ruc_contratado VARCHAR(11)"))
+                conn.commit()
+                print("Migración completada: columna ruc_contratado agregada (NULL por defecto)")
+
+            # Agregar columna tipo_contrato
+            if 'tipo_contrato' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN tipo_contrato VARCHAR(20)"))
+                conn.commit()
+                print("Migración completada: columna tipo_contrato agregada")
+
+            # Establecer 'mantenimiento' como valor por defecto para contratos existentes sin tipo
+            result = conn.execute(text("UPDATE contratos SET tipo_contrato = 'mantenimiento' WHERE tipo_contrato IS NULL"))
+            if result.rowcount > 0:
+                conn.commit()
+                print(f"Migración completada: {result.rowcount} contratos actualizados a tipo 'mantenimiento'")
+    except Exception as e:
+        print(f"Error en migración (puede ignorarse si es nueva instalación): {e}")
+
+migrar_contratos()
+
 # Crear usuarios iniciales si no existen
 crear_usuarios_iniciales()
 
@@ -157,7 +192,8 @@ def listar_documentos(
     ordenar_por: Optional[str] = Query(None, description="Ordenar por: numero, fecha"),
     pagina: int = Query(1, ge=1, description="Número de página"),
     por_pagina: int = Query(20, ge=1, le=100, description="Documentos por página"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)  # Requiere autenticación
 ):
     """
     Lista documentos con filtros opcionales y paginación.
@@ -259,9 +295,14 @@ def crear_documento(
 
 
 @app.get("/api/documentos/{documento_id}", response_model=DocumentoResponse)
-def obtener_documento(documento_id: int, db: Session = Depends(get_db)):
+def obtener_documento(
+    documento_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)  # Requiere autenticación
+):
     """
     Obtiene un documento por su ID con todos sus adjuntos.
+    Requiere autenticación.
     """
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
@@ -321,9 +362,14 @@ def eliminar_documento(
 
 
 @app.get("/api/documentos/{documento_id}/respuestas", response_model=List[DocumentoResponse])
-def obtener_respuestas(documento_id: int, db: Session = Depends(get_db)):
+def obtener_respuestas(
+    documento_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)  # Requiere autenticación
+):
     """
     Obtiene las cartas enviadas como respuesta a un documento.
+    Requiere autenticación.
     """
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
@@ -645,12 +691,19 @@ def eliminar_adjunto(
 @app.get("/api/contratos", response_model=ContratoListResponse)
 def listar_contratos(
     busqueda: Optional[str] = Query(None, description="Búsqueda en contratante, contratado, item, asunto, número"),
+    tipo_contrato: Optional[str] = Query(None, description="Filtrar por tipo: equipamiento,mantenimiento (separados por coma)"),
     pagina: int = Query(1, ge=1),
     por_pagina: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     """Lista contratos con búsqueda opcional y paginación."""
     query = db.query(Contrato)
+
+    # Filtrar por tipo de contrato
+    if tipo_contrato:
+        tipos = [t.strip() for t in tipo_contrato.split(',') if t.strip()]
+        if tipos:
+            query = query.filter(Contrato.tipo_contrato.in_(tipos))
 
     if busqueda:
         busqueda_like = f"%{busqueda}%"
@@ -902,6 +955,63 @@ async def restaurar_uploads(
 def health_check():
     """Verificar estado del servidor"""
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+# ============================================
+# ENDPOINT DE CONSULTA RUC (SUNAT)
+# ============================================
+
+@app.get("/api/consultar-ruc/{ruc}")
+async def consultar_ruc(ruc: str, admin: dict = Depends(verificar_admin)):
+    """
+    Consulta la razón social de un RUC en SUNAT.
+    Usa la API gratuita de apis.net.pe
+    Requiere autenticación.
+    """
+    import httpx
+
+    # Validar formato de RUC (11 dígitos)
+    if not ruc.isdigit() or len(ruc) != 11:
+        raise HTTPException(status_code=400, detail="El RUC debe tener exactamente 11 dígitos")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Usar API gratuita de apis.net.pe
+            response = await client.get(f"https://api.apis.net.pe/v1/ruc?numero={ruc}")
+
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "exito": True,
+                    "ruc": data.get("numeroDocumento", ruc),
+                    "razon_social": data.get("nombre", ""),
+                    "estado": data.get("estado", ""),
+                    "condicion": data.get("condicion", ""),
+                    "direccion": data.get("direccion", ""),
+                    "departamento": data.get("departamento", ""),
+                    "provincia": data.get("provincia", ""),
+                    "distrito": data.get("distrito", "")
+                }
+            elif response.status_code == 404:
+                return {
+                    "exito": False,
+                    "mensaje": "RUC no encontrado en SUNAT"
+                }
+            else:
+                return {
+                    "exito": False,
+                    "mensaje": f"Error al consultar SUNAT: {response.status_code}"
+                }
+    except httpx.TimeoutException:
+        return {
+            "exito": False,
+            "mensaje": "Tiempo de espera agotado al consultar SUNAT"
+        }
+    except Exception as e:
+        return {
+            "exito": False,
+            "mensaje": f"Error de conexión: {str(e)}"
+        }
 
 
 # ============================================

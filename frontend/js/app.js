@@ -28,8 +28,12 @@ let state = {
 document.addEventListener('DOMContentLoaded', () => {
     // Verificar autenticación y actualizar UI
     actualizarUIAutenticacion();
-    // Inicializar con "oficios" seleccionado por defecto
-    filtrarPorCategoria('oficios');
+    // Si está autenticado, mostrar oficios; si no, mostrar contratos (público)
+    if (estaAutenticado()) {
+        filtrarPorCategoria('oficios');
+    } else {
+        filtrarPorCategoria('contratos');
+    }
 });
 
 // ============================================
@@ -48,6 +52,9 @@ function actualizarUIAutenticacion() {
     // Elementos que solo se muestran para admins
     const elementosAdmin = document.querySelectorAll('.admin-only');
 
+    // Elementos que solo se muestran para usuarios autenticados (correspondencia)
+    const elementosCorrespondencia = document.querySelectorAll('.auth-only');
+
     if (autenticado) {
         // Mostrar info de usuario y ocultar botón login
         btnLogin.classList.add('hidden');
@@ -57,6 +64,9 @@ function actualizarUIAutenticacion() {
 
         // Mostrar elementos de admin
         elementosAdmin.forEach(el => el.classList.remove('hidden'));
+
+        // Mostrar categorías de correspondencia
+        elementosCorrespondencia.forEach(el => el.classList.remove('hidden'));
     } else {
         // Mostrar botón login y ocultar info de usuario
         btnLogin.classList.remove('hidden');
@@ -64,6 +74,14 @@ function actualizarUIAutenticacion() {
 
         // Ocultar elementos de admin
         elementosAdmin.forEach(el => el.classList.add('hidden'));
+
+        // Ocultar categorías de correspondencia
+        elementosCorrespondencia.forEach(el => el.classList.add('hidden'));
+
+        // Si está en una categoría de correspondencia, redirigir a contratos
+        if (['oficios', 'cartas-recibidas', 'cartas-nemaec'].includes(state.categoriaActual)) {
+            filtrarPorCategoria('contratos');
+        }
     }
 }
 
@@ -134,9 +152,13 @@ function filtrarPorCategoria(categoria) {
     const filtroReferencia = document.getElementById('filtro-referencia');
     const colReferencia = document.getElementById('col-referencia');
     const colDocumento = document.getElementById('col-documento');
+    const filtrosTipoContrato = document.getElementById('filtros-tipo-contrato');
 
     // Limpiar filtro de referencia al cambiar de categoría
     filtroReferencia.value = '';
+
+    // Ocultar filtros de tipo de contrato por defecto
+    filtrosTipoContrato.classList.add('hidden');
 
     switch (categoria) {
         case 'cartas-nemaec':
@@ -174,6 +196,8 @@ function filtrarPorCategoria(categoria) {
             filtroReferencia.classList.add('hidden');
             colReferencia.classList.add('hidden');
             colDocumento.textContent = 'CONTRATO';
+            // Mostrar filtros de tipo de contrato
+            document.getElementById('filtros-tipo-contrato').classList.remove('hidden');
             actualizarBotonesMenu(categoria);
             cargarContratos();
             return;
@@ -1386,9 +1410,18 @@ function restaurarHeadersTablaDocumentos() {
 async function cargarContratos() {
     const busqueda = document.getElementById('filtro-busqueda').value;
 
+    // Obtener tipos seleccionados
+    const filtroEquipamiento = document.getElementById('filtro-equipamiento');
+    const filtroMantenimiento = document.getElementById('filtro-mantenimiento');
+
+    const tipos = [];
+    if (filtroEquipamiento && filtroEquipamiento.checked) tipos.push('equipamiento');
+    if (filtroMantenimiento && filtroMantenimiento.checked) tipos.push('mantenimiento');
+
     try {
         const data = await apiListarContratos({
             busqueda: busqueda,
+            tipo_contrato: tipos.length > 0 ? tipos.join(',') : null,
             pagina: state.paginaActual,
             por_pagina: 100
         });
@@ -1410,6 +1443,7 @@ function renderizarContratos(data) {
     thead.innerHTML = `
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TIPO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FECHA</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ITEM CONTRATADO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATADO</th>
@@ -1422,7 +1456,7 @@ function renderizarContratos(data) {
     if (data.contratos.length === 0) {
         container.innerHTML = `
             <tr>
-                <td colspan="7" class="px-4 py-8 text-center">
+                <td colspan="8" class="px-4 py-8 text-center">
                     <div class="empty-state">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-12 h-12 mx-auto text-gray-400 mb-4">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1444,10 +1478,16 @@ function renderizarContratos(data) {
 
     const offset = (data.pagina - 1) * data.por_pagina;
 
-    container.innerHTML = data.contratos.map((contrato, index) => `
+    container.innerHTML = data.contratos.map((contrato, index) => {
+        const tipoLabel = contrato.tipo_contrato === 'equipamiento' ?
+            '<span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">Equipamiento</span>' :
+            contrato.tipo_contrato === 'mantenimiento' ?
+            '<span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">Mantenimiento</span>' : '-';
+        return `
         <tr class="documento-row hover:bg-gray-50">
             <td class="px-4 py-3 text-sm text-gray-900 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${offset + index + 1}</td>
             <td class="px-4 py-3 text-sm text-orange-600 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.numero || 'Sin número'}</td>
+            <td class="px-4 py-3 text-sm cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${tipoLabel}</td>
             <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearFecha(contrato.fecha)}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.item_contratado || '-'}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.contratado || '-'}</td>
@@ -1464,7 +1504,7 @@ function renderizarContratos(data) {
             </td>
             ` : '<td></td>'}
         </tr>
-    `).join('');
+    `}).join('');
 
     renderizarPaginacion(data.total, data.pagina, data.por_pagina);
 }
@@ -1483,12 +1523,13 @@ async function verDetalleContrato(id) {
 function renderizarDetalleContrato(contrato) {
     document.getElementById('det-contrato-numero').textContent = contrato.numero || 'Sin número';
     document.getElementById('det-contrato-fecha').textContent = contrato.fecha ? formatearFecha(contrato.fecha) : '-';
+    document.getElementById('det-contrato-tipo').textContent = contrato.tipo_contrato ? capitalizar(contrato.tipo_contrato) : '-';
     document.getElementById('det-contrato-contratante').textContent = contrato.contratante || '-';
+    document.getElementById('det-contrato-ruc').textContent = contrato.ruc_contratado || '-';
     document.getElementById('det-contrato-contratado').textContent = contrato.contratado || '-';
     document.getElementById('det-contrato-item').textContent = contrato.item_contratado || '-';
     document.getElementById('det-contrato-cantidad').textContent = contrato.cantidad || '-';
     document.getElementById('det-contrato-monto').textContent = contrato.monto_total || '-';
-    document.getElementById('det-contrato-asunto').textContent = contrato.asunto || 'No especificado';
     document.getElementById('det-contrato-resumen').textContent = contrato.resumen || 'No hay resumen disponible';
 
     // Archivo principal
@@ -1554,19 +1595,67 @@ function limpiarFormularioContrato() {
     document.getElementById('contrato-id').value = '';
     document.getElementById('contrato-numero').value = '';
     document.getElementById('contrato-fecha').value = '';
-    document.getElementById('contrato-contratante').value = '';
+    document.getElementById('contrato-tipo').value = '';
+    document.getElementById('contrato-contratante').value = 'NEMAEC';
+    document.getElementById('contrato-ruc').value = '';
     document.getElementById('contrato-contratado').value = '';
     document.getElementById('contrato-item').value = '';
     document.getElementById('contrato-cantidad').value = '';
     document.getElementById('contrato-monto').value = '';
-    document.getElementById('contrato-asunto').value = '';
     document.getElementById('contrato-resumen').value = '';
     document.getElementById('contrato-enlace').value = '';
     document.getElementById('contrato-archivo').value = '';
     document.getElementById('contrato-archivo-status').innerHTML = '';
+    document.getElementById('ruc-status').innerHTML = '';
     state.archivoTemporalContrato = null;
     state.adjuntosTemporalesContrato = [];
     document.getElementById('lista-adjuntos-contrato-form').innerHTML = '';
+}
+
+async function buscarRUC() {
+    const rucInput = document.getElementById('contrato-ruc');
+    const contratadoInput = document.getElementById('contrato-contratado');
+    const statusEl = document.getElementById('ruc-status');
+    const btn = document.getElementById('btn-buscar-ruc');
+
+    const ruc = rucInput.value.trim();
+
+    // Validar RUC
+    if (!ruc) {
+        mostrarToast('Ingrese un RUC para buscar', 'error');
+        return;
+    }
+
+    if (!/^\d{11}$/.test(ruc)) {
+        mostrarToast('El RUC debe tener 11 dígitos', 'error');
+        return;
+    }
+
+    // Mostrar estado de carga
+    btn.disabled = true;
+    btn.innerHTML = '<span class="animate-spin">⏳</span>';
+    statusEl.innerHTML = '<span class="text-blue-600">Consultando SUNAT...</span>';
+
+    try {
+        const resultado = await apiConsultarRUC(ruc);
+
+        if (resultado.exito) {
+            contratadoInput.value = resultado.razon_social;
+            statusEl.innerHTML = `<span class="text-green-600">✓ ${resultado.estado} - ${resultado.condicion}</span>`;
+            mostrarToast('Razón social encontrada');
+        } else {
+            statusEl.innerHTML = `<span class="text-red-600">✗ ${resultado.mensaje}</span>`;
+            mostrarToast(resultado.mensaje, 'error');
+        }
+    } catch (error) {
+        statusEl.innerHTML = `<span class="text-red-600">✗ Error al consultar</span>`;
+        mostrarToast('Error: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>`;
+    }
 }
 
 function editarContrato() {
@@ -1577,12 +1666,13 @@ function editarContrato() {
     document.getElementById('contrato-id').value = contrato.id;
     document.getElementById('contrato-numero').value = contrato.numero || '';
     document.getElementById('contrato-fecha').value = contrato.fecha ? contrato.fecha.split('T')[0] : '';
+    document.getElementById('contrato-tipo').value = contrato.tipo_contrato || '';
     document.getElementById('contrato-contratante').value = contrato.contratante || '';
+    document.getElementById('contrato-ruc').value = contrato.ruc_contratado || '';
     document.getElementById('contrato-contratado').value = contrato.contratado || '';
     document.getElementById('contrato-item').value = contrato.item_contratado || '';
     document.getElementById('contrato-cantidad').value = contrato.cantidad || '';
     document.getElementById('contrato-monto').value = contrato.monto_total || '';
-    document.getElementById('contrato-asunto').value = contrato.asunto || '';
     document.getElementById('contrato-resumen').value = contrato.resumen || '';
     document.getElementById('contrato-enlace').value = contrato.enlace_drive || '';
 
@@ -1604,12 +1694,13 @@ async function guardarContrato(event) {
     const contrato = {
         numero: document.getElementById('contrato-numero').value || null,
         fecha: document.getElementById('contrato-fecha').value || null,
+        tipo_contrato: document.getElementById('contrato-tipo').value || null,
         contratante: document.getElementById('contrato-contratante').value || null,
+        ruc_contratado: document.getElementById('contrato-ruc').value || null,
         contratado: document.getElementById('contrato-contratado').value || null,
         item_contratado: document.getElementById('contrato-item').value || null,
         cantidad: document.getElementById('contrato-cantidad').value ? parseInt(document.getElementById('contrato-cantidad').value) : null,
         monto_total: document.getElementById('contrato-monto').value || null,
-        asunto: document.getElementById('contrato-asunto').value || null,
         resumen: document.getElementById('contrato-resumen').value || null,
         enlace_drive: document.getElementById('contrato-enlace').value || null
     };

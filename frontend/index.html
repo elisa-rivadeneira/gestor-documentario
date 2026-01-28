@@ -49,21 +49,21 @@
                 <!-- Botones de categoría -->
                 <div class="flex flex-wrap gap-3 mb-4">
                     <button id="btn-cartas-nemaec" onclick="filtrarPorCategoria('cartas-nemaec')"
-                            class="menu-btn menu-btn-nemaec flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                            class="auth-only hidden menu-btn menu-btn-nemaec flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                         </svg>
                         CARTAS NEMAEC
                     </button>
                     <button id="btn-oficios" onclick="filtrarPorCategoria('oficios')"
-                            class="menu-btn menu-btn-oficios flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                            class="auth-only hidden menu-btn menu-btn-oficios flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                         OFICIOS
                     </button>
                     <button id="btn-cartas-recibidas" onclick="filtrarPorCategoria('cartas-recibidas')"
-                            class="menu-btn menu-btn-recibidas flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                            class="auth-only hidden menu-btn menu-btn-recibidas flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                         </svg>
@@ -87,6 +87,22 @@
                            placeholder="Filtrar por oficio de referencia..."
                            onkeyup="debounce(cargarDocumentos, 300)()"
                            class="flex-1 border rounded-lg px-3 py-2 hidden">
+                </div>
+                <!-- Filtros de tipo de contrato (solo visible en contratos) -->
+                <div id="filtros-tipo-contrato" class="hidden mt-3 flex items-center gap-4">
+                    <span class="text-sm text-gray-600 font-medium">Tipo:</span>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="filtro-equipamiento" checked
+                               onchange="cargarContratos()"
+                               class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500">
+                        <span class="text-sm text-gray-700">Equipamiento</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="filtro-mantenimiento" checked
+                               onchange="cargarContratos()"
+                               class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500">
+                        <span class="text-sm text-gray-700">Mantenimiento</span>
+                    </label>
                 </div>
                 <!-- Campos ocultos para filtros -->
                 <input type="hidden" id="filtro-tipo" value="oficio">
@@ -485,58 +501,81 @@
                     <div class="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
                         <h3 class="font-medium text-orange-800 mb-3">Datos del Contrato</h3>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Número de Contrato</label>
-                                <input type="text" id="contrato-numero" placeholder="Ej: CONT-001-2026"
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Número de Contrato *</label>
+                                <input type="text" id="contrato-numero" placeholder="Ej: CONT-001-2026" required
                                        class="w-full border rounded-lg px-3 py-2 bg-white">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
-                                <input type="date" id="contrato-fecha" class="w-full border rounded-lg px-3 py-2 bg-white">
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Contratante</label>
-                                <input type="text" id="contrato-contratante" placeholder="Entidad contratante"
-                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
+                                <input type="date" id="contrato-fecha" required class="w-full border rounded-lg px-3 py-2 bg-white">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Contratado</label>
-                                <input type="text" id="contrato-contratado" placeholder="Persona o empresa contratada"
-                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Contrato *</label>
+                                <select id="contrato-tipo" required class="w-full border rounded-lg px-3 py-2 bg-white">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="equipamiento">Equipamiento</option>
+                                    <option value="mantenimiento">Mantenimiento</option>
+                                </select>
                             </div>
                         </div>
 
                         <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Item Contratado</label>
-                            <input type="text" id="contrato-item" placeholder="Descripción del item o servicio"
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Contratante *</label>
+                            <input type="text" id="contrato-contratante" value="NEMAEC" required
+                                   class="w-full border rounded-lg px-3 py-2 bg-white">
+                        </div>
+
+                        <div class="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <label class="block text-sm font-medium text-blue-800 mb-2">Contratado (Proveedor) *</label>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div class="md:col-span-1">
+                                    <label class="block text-xs text-gray-600 mb-1">RUC *</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="contrato-ruc" placeholder="20123456789" maxlength="11" required
+                                               class="flex-1 border rounded-lg px-3 py-2 bg-white"
+                                               onkeypress="if(event.key==='Enter'){event.preventDefault();buscarRUC();}">
+                                        <button type="button" onclick="buscarRUC()"
+                                                id="btn-buscar-ruc"
+                                                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg flex items-center gap-1 transition"
+                                                title="Buscar en SUNAT">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs text-gray-600 mb-1">Razón Social *</label>
+                                    <input type="text" id="contrato-contratado" placeholder="Se completa automáticamente al buscar RUC" required
+                                           class="w-full border rounded-lg px-3 py-2 bg-white">
+                                </div>
+                            </div>
+                            <p id="ruc-status" class="text-xs text-gray-500 mt-2"></p>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Item Contratado *</label>
+                            <input type="text" id="contrato-item" placeholder="Descripción del item o servicio" required
                                    class="w-full border rounded-lg px-3 py-2 bg-white">
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
-                                <input type="number" id="contrato-cantidad" placeholder="0" min="0"
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad *</label>
+                                <input type="number" id="contrato-cantidad" placeholder="0" min="1" required
                                        class="w-full border rounded-lg px-3 py-2 bg-white">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Monto Total</label>
-                                <input type="text" id="contrato-monto" placeholder="Ej: S/ 10,000.00"
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Monto Total *</label>
+                                <input type="text" id="contrato-monto" placeholder="Ej: S/ 10,000.00" required
                                        class="w-full border rounded-lg px-3 py-2 bg-white">
                             </div>
                         </div>
 
                         <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Asunto</label>
-                            <input type="text" id="contrato-asunto" placeholder="Asunto del contrato"
-                                   class="w-full border rounded-lg px-3 py-2 bg-white">
-                        </div>
-
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Resumen</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Resumen (opcional)</label>
                             <textarea id="contrato-resumen" rows="3" placeholder="Resumen del contrato"
                                       class="w-full border rounded-lg px-3 py-2 bg-white"></textarea>
                         </div>
@@ -630,14 +669,22 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                         <div>
                             <span class="text-gray-500">Fecha:</span>
                             <p id="det-contrato-fecha" class="font-medium"></p>
                         </div>
                         <div>
+                            <span class="text-gray-500">Tipo:</span>
+                            <p id="det-contrato-tipo" class="font-medium"></p>
+                        </div>
+                        <div>
                             <span class="text-gray-500">Contratante:</span>
                             <p id="det-contrato-contratante" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">RUC:</span>
+                            <p id="det-contrato-ruc" class="font-medium"></p>
                         </div>
                         <div>
                             <span class="text-gray-500">Contratado:</span>
@@ -658,11 +705,8 @@
                     </div>
                 </div>
 
-                <!-- Asunto y Resumen -->
+                <!-- Resumen -->
                 <div class="bg-white rounded-lg shadow p-6 mb-4">
-                    <h3 class="font-semibold text-gray-700 mb-2">Asunto</h3>
-                    <p id="det-contrato-asunto" class="text-gray-800 mb-4"></p>
-
                     <h3 class="font-semibold text-gray-700 mb-2">Resumen</h3>
                     <p id="det-contrato-resumen" class="text-gray-800 whitespace-pre-line"></p>
                 </div>

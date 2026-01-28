@@ -179,7 +179,9 @@ class AdjuntoContratoResponse(AdjuntoContratoBase):
 class ContratoBase(BaseModel):
     numero: Optional[str] = None
     fecha: Optional[datetime] = None
+    tipo_contrato: Optional[str] = None  # equipamiento, mantenimiento
     contratante: Optional[str] = None
+    ruc_contratado: Optional[str] = None
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
     cantidad: Optional[int] = None
@@ -198,7 +200,9 @@ class ContratoUpdate(BaseModel):
     """Schema para actualizar un contrato existente"""
     numero: Optional[str] = None
     fecha: Optional[datetime] = None
+    tipo_contrato: Optional[str] = None
     contratante: Optional[str] = None
+    ruc_contratado: Optional[str] = None
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
     cantidad: Optional[int] = None

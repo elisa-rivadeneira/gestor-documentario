@@ -16,7 +16,7 @@ from sqlalchemy import or_
 import pdfplumber
 
 from database import engine, get_db, Base
-from models import Documento, Adjunto, Usuario, Contrato, AdjuntoContrato
+from models import Documento, Adjunto, Usuario, Contrato, AdjuntoContrato, ComisariaContrato
 from schemas import (
     DocumentoCreate, DocumentoUpdate, DocumentoResponse, DocumentoListResponse,
     AdjuntoCreate, AdjuntoResponse, AnalisisIARequest, AnalisisIAResponse,
@@ -34,15 +34,18 @@ Base.metadata.create_all(bind=engine)
 # Migración: agregar columnas nuevas a contratos si no existen
 def migrar_contratos():
     """Agrega columnas nuevas a la tabla contratos si no existen.
-    - ruc_contratado: NULL por defecto (campo nuevo)
+    - ruc_contratado: NULL por defecto
     - tipo_contrato: 'mantenimiento' por defecto para registros existentes
+    - precio_unitario: NULL por defecto (solo para equipamiento)
+    - monto_total: convertir de TEXT a REAL si es necesario
     """
     from sqlalchemy import text
     try:
         with engine.connect() as conn:
             # Verificar columnas existentes
             result = conn.execute(text("PRAGMA table_info(contratos)"))
-            columnas = [row[1] for row in result.fetchall()]
+            columnas_info = result.fetchall()
+            columnas = [row[1] for row in columnas_info]
 
             # Agregar columna ruc_contratado (NULL por defecto)
             if 'ruc_contratado' not in columnas:
@@ -56,11 +59,35 @@ def migrar_contratos():
                 conn.commit()
                 print("Migración completada: columna tipo_contrato agregada")
 
+            # Agregar columna precio_unitario (NULL por defecto, solo para equipamiento)
+            if 'precio_unitario' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN precio_unitario REAL"))
+                conn.commit()
+                print("Migración completada: columna precio_unitario agregada (NULL por defecto)")
+
             # Establecer 'mantenimiento' como valor por defecto para contratos existentes sin tipo
             result = conn.execute(text("UPDATE contratos SET tipo_contrato = 'mantenimiento' WHERE tipo_contrato IS NULL"))
             if result.rowcount > 0:
                 conn.commit()
                 print(f"Migración completada: {result.rowcount} contratos actualizados a tipo 'mantenimiento'")
+
+            # Convertir monto_total de texto a número (extraer solo dígitos y decimales)
+            # Solo ejecutar si hay datos con formato texto
+            try:
+                conn.execute(text("""
+                    UPDATE contratos
+                    SET monto_total = CAST(
+                        REPLACE(REPLACE(REPLACE(monto_total, 'S/', ''), ',', ''), ' ', '')
+                        AS REAL
+                    )
+                    WHERE monto_total IS NOT NULL
+                    AND monto_total != ''
+                    AND typeof(monto_total) = 'text'
+                """))
+                conn.commit()
+            except:
+                pass  # Ignorar si ya es numérico o hay error de conversión
+
     except Exception as e:
         print(f"Error en migración (puede ignorarse si es nueva instalación): {e}")
 
@@ -738,10 +765,28 @@ def crear_contrato(
     admin: dict = Depends(verificar_admin)
 ):
     """Crea un nuevo contrato. Requiere autenticación."""
-    db_contrato = Contrato(**contrato.model_dump())
+    # Extraer comisarías del payload
+    comisarias_data = contrato.comisarias
+    contrato_dict = contrato.model_dump(exclude={'comisarias'})
+
+    # Crear el contrato
+    db_contrato = Contrato(**contrato_dict)
     db.add(db_contrato)
     db.commit()
     db.refresh(db_contrato)
+
+    # Si es mantenimiento y hay comisarías, crearlas
+    if contrato.tipo_contrato == 'mantenimiento' and comisarias_data:
+        for comisaria in comisarias_data:
+            db_comisaria = ComisariaContrato(
+                contrato_id=db_contrato.id,
+                nombre_cpnp=comisaria.nombre_cpnp,
+                monto=comisaria.monto
+            )
+            db.add(db_comisaria)
+        db.commit()
+        db.refresh(db_contrato)
+
     return db_contrato
 
 
@@ -766,9 +811,26 @@ def actualizar_contrato(
     if not contrato:
         raise HTTPException(status_code=404, detail="Contrato no encontrado")
 
-    update_data = contrato_update.model_dump(exclude_unset=True)
+    # Extraer comisarías del payload
+    comisarias_data = contrato_update.comisarias
+    update_data = contrato_update.model_dump(exclude_unset=True, exclude={'comisarias'})
+
     for field, value in update_data.items():
         setattr(contrato, field, value)
+
+    # Si se envían comisarías, reemplazar las existentes
+    if comisarias_data is not None:
+        # Eliminar comisarías existentes
+        db.query(ComisariaContrato).filter(ComisariaContrato.contrato_id == contrato_id).delete()
+
+        # Crear nuevas comisarías
+        for comisaria in comisarias_data:
+            db_comisaria = ComisariaContrato(
+                contrato_id=contrato_id,
+                nombre_cpnp=comisaria.nombre_cpnp,
+                monto=comisaria.monto
+            )
+            db.add(db_comisaria)
 
     contrato.updated_at = datetime.utcnow()
     db.commit()

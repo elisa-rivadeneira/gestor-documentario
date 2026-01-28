@@ -1491,7 +1491,7 @@ function renderizarContratos(data) {
             <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearFecha(contrato.fecha)}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.item_contratado || '-'}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.contratado || '-'}</td>
-            <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.monto_total || '-'}</td>
+            <td class="px-4 py-3 text-sm text-green-700 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearMonto(contrato.monto_total)}</td>
             ${esAdmin ? `
             <td class="px-4 py-3 text-center">
                 <button onclick="confirmarEliminarContrato(${contrato.id}, '${(contrato.numero || '').replace(/'/g, "\\'")}'); event.stopPropagation();"
@@ -1528,9 +1528,39 @@ function renderizarDetalleContrato(contrato) {
     document.getElementById('det-contrato-ruc').textContent = contrato.ruc_contratado || '-';
     document.getElementById('det-contrato-contratado').textContent = contrato.contratado || '-';
     document.getElementById('det-contrato-item').textContent = contrato.item_contratado || '-';
-    document.getElementById('det-contrato-cantidad').textContent = contrato.cantidad || '-';
-    document.getElementById('det-contrato-monto').textContent = contrato.monto_total || '-';
     document.getElementById('det-contrato-resumen').textContent = contrato.resumen || 'No hay resumen disponible';
+
+    // Mostrar sección según tipo de contrato
+    const detEquipamiento = document.getElementById('det-equipamiento');
+    const detMantenimiento = document.getElementById('det-mantenimiento');
+
+    if (contrato.tipo_contrato === 'equipamiento') {
+        detEquipamiento.classList.remove('hidden');
+        detMantenimiento.classList.add('hidden');
+        document.getElementById('det-contrato-cantidad').textContent = contrato.cantidad || '-';
+        document.getElementById('det-contrato-precio-unitario').textContent = formatearMonto(contrato.precio_unitario);
+        document.getElementById('det-contrato-monto').textContent = formatearMonto(contrato.monto_total);
+    } else if (contrato.tipo_contrato === 'mantenimiento') {
+        detEquipamiento.classList.add('hidden');
+        detMantenimiento.classList.remove('hidden');
+
+        // Renderizar tabla de comisarías
+        const tbody = document.getElementById('det-tabla-comisarias');
+        if (contrato.comisarias && contrato.comisarias.length > 0) {
+            tbody.innerHTML = contrato.comisarias.map(com => `
+                <tr>
+                    <td class="py-2">${com.nombre_cpnp}</td>
+                    <td class="py-2 text-right">${formatearMonto(com.monto)}</td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="2" class="py-2 text-gray-500">Sin comisarías registradas</td></tr>';
+        }
+        document.getElementById('det-contrato-monto-total').textContent = formatearMonto(contrato.monto_total);
+    } else {
+        detEquipamiento.classList.add('hidden');
+        detMantenimiento.classList.add('hidden');
+    }
 
     // Archivo principal
     const archivoContainer = document.getElementById('det-contrato-archivo');
@@ -1601,7 +1631,11 @@ function limpiarFormularioContrato() {
     document.getElementById('contrato-contratado').value = '';
     document.getElementById('contrato-item').value = '';
     document.getElementById('contrato-cantidad').value = '';
+    document.getElementById('contrato-precio-unitario').value = '';
+    document.getElementById('contrato-monto-equipamiento').value = '';
     document.getElementById('contrato-monto').value = '';
+    document.getElementById('contrato-num-comisarias').value = '1';
+    document.getElementById('contrato-monto-mantenimiento').value = '';
     document.getElementById('contrato-resumen').value = '';
     document.getElementById('contrato-enlace').value = '';
     document.getElementById('contrato-archivo').value = '';
@@ -1610,6 +1644,104 @@ function limpiarFormularioContrato() {
     state.archivoTemporalContrato = null;
     state.adjuntosTemporalesContrato = [];
     document.getElementById('lista-adjuntos-contrato-form').innerHTML = '';
+
+    // Ocultar ambos paneles de tipo
+    document.getElementById('campos-equipamiento').classList.add('hidden');
+    document.getElementById('campos-mantenimiento').classList.add('hidden');
+    document.getElementById('tabla-comisarias').innerHTML = '';
+}
+
+// Función para formatear monto con S/ y 2 decimales
+function formatearMonto(valor) {
+    if (valor === null || valor === undefined || valor === '') return '-';
+    const num = parseFloat(valor);
+    if (isNaN(num)) return '-';
+    return 'S/ ' + num.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Cambiar tipo de contrato - mostrar/ocultar campos
+function cambiarTipoContrato() {
+    const tipo = document.getElementById('contrato-tipo').value;
+    const camposEquipamiento = document.getElementById('campos-equipamiento');
+    const camposMantenimiento = document.getElementById('campos-mantenimiento');
+
+    if (tipo === 'equipamiento') {
+        camposEquipamiento.classList.remove('hidden');
+        camposMantenimiento.classList.add('hidden');
+        // Limpiar campos de mantenimiento
+        document.getElementById('tabla-comisarias').innerHTML = '';
+        document.getElementById('contrato-monto-mantenimiento').value = '';
+    } else if (tipo === 'mantenimiento') {
+        camposEquipamiento.classList.add('hidden');
+        camposMantenimiento.classList.remove('hidden');
+        // Limpiar campos de equipamiento
+        document.getElementById('contrato-cantidad').value = '';
+        document.getElementById('contrato-precio-unitario').value = '';
+        document.getElementById('contrato-monto-equipamiento').value = '';
+        // Generar tabla inicial con 1 comisaría
+        actualizarTablaComisarias();
+    } else {
+        camposEquipamiento.classList.add('hidden');
+        camposMantenimiento.classList.add('hidden');
+    }
+}
+
+// Calcular monto total para equipamiento
+function calcularMontoEquipamiento() {
+    const cantidad = parseFloat(document.getElementById('contrato-cantidad').value) || 0;
+    const precioUnitario = parseFloat(document.getElementById('contrato-precio-unitario').value) || 0;
+    const montoTotal = cantidad * precioUnitario;
+
+    document.getElementById('contrato-monto-equipamiento').value = formatearMonto(montoTotal);
+    document.getElementById('contrato-monto').value = montoTotal;
+}
+
+// Actualizar tabla de comisarías según el número seleccionado
+function actualizarTablaComisarias() {
+    const numComisarias = parseInt(document.getElementById('contrato-num-comisarias').value) || 1;
+    const tbody = document.getElementById('tabla-comisarias');
+
+    // Guardar valores actuales
+    const valoresActuales = [];
+    tbody.querySelectorAll('tr').forEach(row => {
+        const nombre = row.querySelector('input[name="cpnp"]')?.value || '';
+        const monto = row.querySelector('input[name="monto"]')?.value || '';
+        valoresActuales.push({ nombre, monto });
+    });
+
+    // Generar nuevas filas
+    let html = '';
+    for (let i = 0; i < numComisarias; i++) {
+        const nombre = valoresActuales[i]?.nombre || '';
+        const monto = valoresActuales[i]?.monto || '';
+        html += `
+            <tr>
+                <td class="py-2 pr-2">
+                    <input type="text" name="cpnp" placeholder="Ej: CPNP San Martín" value="${nombre}"
+                           class="w-full border rounded px-2 py-1 bg-white" required>
+                </td>
+                <td class="py-2">
+                    <input type="number" name="monto" placeholder="0.00" step="0.01" min="0" value="${monto}"
+                           onchange="calcularMontoMantenimiento()"
+                           class="w-full border rounded px-2 py-1 bg-white text-right" required>
+                </td>
+            </tr>
+        `;
+    }
+    tbody.innerHTML = html;
+    calcularMontoMantenimiento();
+}
+
+// Calcular monto total para mantenimiento (suma de comisarías)
+function calcularMontoMantenimiento() {
+    const montos = document.querySelectorAll('#tabla-comisarias input[name="monto"]');
+    let total = 0;
+    montos.forEach(input => {
+        total += parseFloat(input.value) || 0;
+    });
+
+    document.getElementById('contrato-monto-mantenimiento').value = formatearMonto(total);
+    document.getElementById('contrato-monto').value = total;
 }
 
 async function buscarRUC() {
@@ -1671,10 +1803,35 @@ function editarContrato() {
     document.getElementById('contrato-ruc').value = contrato.ruc_contratado || '';
     document.getElementById('contrato-contratado').value = contrato.contratado || '';
     document.getElementById('contrato-item').value = contrato.item_contratado || '';
-    document.getElementById('contrato-cantidad').value = contrato.cantidad || '';
     document.getElementById('contrato-monto').value = contrato.monto_total || '';
     document.getElementById('contrato-resumen').value = contrato.resumen || '';
     document.getElementById('contrato-enlace').value = contrato.enlace_drive || '';
+
+    // Mostrar campos según tipo de contrato
+    cambiarTipoContrato();
+
+    if (contrato.tipo_contrato === 'equipamiento') {
+        document.getElementById('contrato-cantidad').value = contrato.cantidad || '';
+        document.getElementById('contrato-precio-unitario').value = contrato.precio_unitario || '';
+        calcularMontoEquipamiento();
+    } else if (contrato.tipo_contrato === 'mantenimiento') {
+        // Cargar comisarías
+        const numComisarias = contrato.comisarias?.length || 1;
+        document.getElementById('contrato-num-comisarias').value = numComisarias;
+        actualizarTablaComisarias();
+
+        // Llenar valores de comisarías
+        if (contrato.comisarias && contrato.comisarias.length > 0) {
+            const rows = document.querySelectorAll('#tabla-comisarias tr');
+            contrato.comisarias.forEach((com, i) => {
+                if (rows[i]) {
+                    rows[i].querySelector('input[name="cpnp"]').value = com.nombre_cpnp;
+                    rows[i].querySelector('input[name="monto"]').value = com.monto;
+                }
+            });
+            calcularMontoMantenimiento();
+        }
+    }
 
     if (contrato.archivo_local) {
         document.getElementById('contrato-archivo-status').innerHTML = `Archivo actual: <a href="${window.location.origin}/uploads/${contrato.archivo_local}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${contrato.archivo_local}</a>`;
@@ -1690,20 +1847,41 @@ async function guardarContrato(event) {
     event.preventDefault();
 
     const contratoId = document.getElementById('contrato-id').value;
+    const tipoContrato = document.getElementById('contrato-tipo').value;
 
     const contrato = {
         numero: document.getElementById('contrato-numero').value || null,
         fecha: document.getElementById('contrato-fecha').value || null,
-        tipo_contrato: document.getElementById('contrato-tipo').value || null,
+        tipo_contrato: tipoContrato || null,
         contratante: document.getElementById('contrato-contratante').value || null,
         ruc_contratado: document.getElementById('contrato-ruc').value || null,
         contratado: document.getElementById('contrato-contratado').value || null,
         item_contratado: document.getElementById('contrato-item').value || null,
-        cantidad: document.getElementById('contrato-cantidad').value ? parseInt(document.getElementById('contrato-cantidad').value) : null,
-        monto_total: document.getElementById('contrato-monto').value || null,
         resumen: document.getElementById('contrato-resumen').value || null,
         enlace_drive: document.getElementById('contrato-enlace').value || null
     };
+
+    // Campos según tipo de contrato
+    if (tipoContrato === 'equipamiento') {
+        contrato.cantidad = document.getElementById('contrato-cantidad').value ? parseInt(document.getElementById('contrato-cantidad').value) : null;
+        contrato.precio_unitario = document.getElementById('contrato-precio-unitario').value ? parseFloat(document.getElementById('contrato-precio-unitario').value) : null;
+        contrato.monto_total = document.getElementById('contrato-monto').value ? parseFloat(document.getElementById('contrato-monto').value) : null;
+    } else if (tipoContrato === 'mantenimiento') {
+        // Obtener comisarías de la tabla
+        const comisarias = [];
+        document.querySelectorAll('#tabla-comisarias tr').forEach(row => {
+            const nombre = row.querySelector('input[name="cpnp"]')?.value;
+            const monto = row.querySelector('input[name="monto"]')?.value;
+            if (nombre && monto) {
+                comisarias.push({
+                    nombre_cpnp: nombre,
+                    monto: parseFloat(monto)
+                });
+            }
+        });
+        contrato.comisarias = comisarias;
+        contrato.monto_total = document.getElementById('contrato-monto').value ? parseFloat(document.getElementById('contrato-monto').value) : null;
+    }
 
     try {
         let resultado;

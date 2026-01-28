@@ -176,6 +176,30 @@ class AdjuntoContratoResponse(AdjuntoContratoBase):
 
 # === Schemas para Contratos ===
 
+# === Schemas para Comisarías de Contrato ===
+
+class ComisariaContratoBase(BaseModel):
+    nombre_cpnp: str
+    monto: float
+
+
+class ComisariaContratoCreate(ComisariaContratoBase):
+    """Schema para crear una comisaría de contrato"""
+    pass
+
+
+class ComisariaContratoResponse(ComisariaContratoBase):
+    """Schema para respuesta de comisaría"""
+    id: int
+    contrato_id: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# === Schemas para Contratos ===
+
 class ContratoBase(BaseModel):
     numero: Optional[str] = None
     fecha: Optional[datetime] = None
@@ -185,7 +209,8 @@ class ContratoBase(BaseModel):
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
     cantidad: Optional[int] = None
-    monto_total: Optional[str] = None
+    precio_unitario: Optional[float] = None  # Solo para equipamiento
+    monto_total: Optional[float] = None  # Calculado automáticamente
     asunto: Optional[str] = None
     resumen: Optional[str] = None
     enlace_drive: Optional[str] = None
@@ -193,7 +218,7 @@ class ContratoBase(BaseModel):
 
 class ContratoCreate(ContratoBase):
     """Schema para crear un nuevo contrato"""
-    pass
+    comisarias: Optional[List[ComisariaContratoCreate]] = None  # Solo para mantenimiento
 
 
 class ContratoUpdate(BaseModel):
@@ -206,10 +231,12 @@ class ContratoUpdate(BaseModel):
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
     cantidad: Optional[int] = None
-    monto_total: Optional[str] = None
+    precio_unitario: Optional[float] = None
+    monto_total: Optional[float] = None
     asunto: Optional[str] = None
     resumen: Optional[str] = None
     enlace_drive: Optional[str] = None
+    comisarias: Optional[List[ComisariaContratoCreate]] = None
 
 
 class ContratoResponse(ContratoBase):
@@ -219,6 +246,7 @@ class ContratoResponse(ContratoBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     adjuntos: List[AdjuntoContratoResponse] = []
+    comisarias: List[ComisariaContratoResponse] = []
 
     class Config:
         from_attributes = True

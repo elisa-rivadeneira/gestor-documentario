@@ -1,7 +1,8 @@
 """
 Modelos SQLAlchemy para el sistema de gestión de correspondencia
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -101,8 +102,10 @@ class Contrato(Base):
     ruc_contratado = Column(String(11), nullable=True)  # RUC del contratado
     contratado = Column(String(255), nullable=True)  # Razón social del contratado
     item_contratado = Column(String(500), nullable=True)
+    # Campos para EQUIPAMIENTO
     cantidad = Column(Integer, nullable=True)
-    monto_total = Column(String(100), nullable=True)
+    precio_unitario = Column(Float, nullable=True)  # Solo para equipamiento
+    monto_total = Column(Float, nullable=True)  # Calculado automáticamente
     asunto = Column(String(500), nullable=True)
     resumen = Column(Text, nullable=True)
     archivo_local = Column(String(500), nullable=True)
@@ -112,6 +115,23 @@ class Contrato(Base):
     updated_at = Column(DateTime, onupdate=func.now())
 
     adjuntos = relationship("AdjuntoContrato", back_populates="contrato", cascade="all, delete-orphan")
+    comisarias = relationship("ComisariaContrato", back_populates="contrato", cascade="all, delete-orphan")
+
+
+class ComisariaContrato(Base):
+    """
+    Modelo para comisarías en contratos de mantenimiento.
+    Cada contrato de mantenimiento puede tener una o más comisarías.
+    """
+    __tablename__ = "comisarias_contrato"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contrato_id = Column(Integer, ForeignKey("contratos.id"), nullable=False)
+    nombre_cpnp = Column(String(255), nullable=False)  # Nombre de la comisaría
+    monto = Column(Float, nullable=False)  # Monto para esta comisaría
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    contrato = relationship("Contrato", back_populates="comisarias")
 
 
 class AdjuntoContrato(Base):

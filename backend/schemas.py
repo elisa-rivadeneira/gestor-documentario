@@ -208,6 +208,8 @@ class ContratoBase(BaseModel):
     ruc_contratado: Optional[str] = None
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
+    plazo_dias: Optional[int] = None  # Número de días del contrato
+    dias_adicionales: Optional[int] = 0  # Días de adendas (por defecto 0)
     cantidad: Optional[int] = None
     precio_unitario: Optional[float] = None  # Solo para equipamiento
     monto_total: Optional[float] = None  # Calculado automáticamente
@@ -230,6 +232,8 @@ class ContratoUpdate(BaseModel):
     ruc_contratado: Optional[str] = None
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
+    plazo_dias: Optional[int] = None
+    dias_adicionales: Optional[int] = None
     cantidad: Optional[int] = None
     precio_unitario: Optional[float] = None
     monto_total: Optional[float] = None

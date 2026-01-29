@@ -90,20 +90,95 @@
                            class="flex-1 border rounded-lg px-3 py-2 hidden">
                 </div>
                 <!-- Filtros de tipo de contrato (solo visible en contratos) -->
-                <div id="filtros-tipo-contrato" class="hidden mt-3 flex items-center gap-4">
-                    <span class="text-sm text-gray-600 font-medium">Tipo:</span>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" id="filtro-equipamiento" checked
-                               onchange="cargarContratos()"
-                               class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500">
-                        <span class="text-sm text-gray-700">Equipamiento</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" id="filtro-mantenimiento" checked
-                               onchange="cargarContratos()"
-                               class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500">
-                        <span class="text-sm text-gray-700">Mantenimiento</span>
-                    </label>
+                <div id="filtros-tipo-contrato" class="hidden mt-3 space-y-3">
+                    <!-- Fila 1: Tipo de contrato y botón Excel -->
+                    <div class="flex items-center gap-4 flex-wrap">
+                        <span class="text-sm text-gray-600 font-medium">Tipo:</span>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="filtro-equipamiento" checked
+                                   onchange="aplicarFiltrosContratos()"
+                                   class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500">
+                            <span class="text-sm text-gray-700">Equipamiento</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="filtro-mantenimiento" checked
+                                   onchange="aplicarFiltrosContratos()"
+                                   class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500">
+                            <span class="text-sm text-gray-700">Mantenimiento</span>
+                        </label>
+                        <div class="ml-auto flex items-center gap-2">
+                            <button onclick="limpiarFiltrosContratos()"
+                                    class="flex items-center gap-1 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-lg transition"
+                                    title="Limpiar filtros">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                                Limpiar
+                            </button>
+                            <button onclick="descargarExcelContratos()"
+                                    class="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition"
+                                    title="Descargar Excel">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12.9,14.5L15.8,19H14L12,15.6L10,19H8.2L11.1,14.5L8.2,10H10L12,13.4L14,10H15.8L12.9,14.5Z"/>
+                                </svg>
+                                Excel
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Fila 2: Filtros avanzados -->
+                    <div class="flex items-end gap-4 flex-wrap p-3 bg-gray-50 rounded-lg border">
+                        <!-- Filtro Contratado -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 mb-1">Contratado</label>
+                            <select id="filtro-contratado" onchange="aplicarFiltrosContratos()"
+                                    class="border rounded px-2 py-1.5 text-sm bg-white min-w-[180px]">
+                                <option value="">-- Todos --</option>
+                            </select>
+                        </div>
+                        <!-- Filtro Fecha Inicio -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 mb-1">Fecha Inicio</label>
+                            <div class="flex items-center gap-1">
+                                <select id="filtro-fecha-inicio-op" onchange="aplicarFiltrosContratos()"
+                                        class="border rounded px-2 py-1.5 text-sm bg-white">
+                                    <option value="">--</option>
+                                    <option value=">=">≥</option>
+                                    <option value="<=">≤</option>
+                                </select>
+                                <input type="date" id="filtro-fecha-inicio" onchange="aplicarFiltrosContratos()"
+                                       class="border rounded px-2 py-1.5 text-sm bg-white">
+                            </div>
+                        </div>
+                        <!-- Filtro Fecha Fin -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 mb-1">Fecha Fin</label>
+                            <div class="flex items-center gap-1">
+                                <select id="filtro-fecha-fin-op" onchange="aplicarFiltrosContratos()"
+                                        class="border rounded px-2 py-1.5 text-sm bg-white">
+                                    <option value="">--</option>
+                                    <option value=">=">≥</option>
+                                    <option value="<=">≤</option>
+                                </select>
+                                <input type="date" id="filtro-fecha-fin" onchange="aplicarFiltrosContratos()"
+                                       class="border rounded px-2 py-1.5 text-sm bg-white">
+                            </div>
+                        </div>
+                        <!-- Filtro Monto -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 mb-1">Monto</label>
+                            <div class="flex items-center gap-1">
+                                <select id="filtro-monto-op" onchange="aplicarFiltrosContratos()"
+                                        class="border rounded px-2 py-1.5 text-sm bg-white">
+                                    <option value="">--</option>
+                                    <option value=">=">≥</option>
+                                    <option value="<=">≤</option>
+                                </select>
+                                <input type="number" id="filtro-monto" placeholder="0.00" step="0.01" min="0"
+                                       onchange="aplicarFiltrosContratos()"
+                                       class="border rounded px-2 py-1.5 text-sm bg-white w-28">
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <!-- Campos ocultos para filtros -->
                 <input type="hidden" id="filtro-tipo" value="oficio">
@@ -509,8 +584,9 @@
                                        class="w-full border rounded-lg px-3 py-2 bg-white">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
-                                <input type="date" id="contrato-fecha" required class="w-full border rounded-lg px-3 py-2 bg-white">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de Contrato *</label>
+                                <input type="date" id="contrato-fecha" required onchange="calcularFechaFin()"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Contrato *</label>
@@ -520,6 +596,32 @@
                                     <option value="equipamiento">Equipamiento</option>
                                     <option value="mantenimiento">Mantenimiento</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <!-- Plazo del contrato -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                            <div>
+                                <label class="block text-sm font-medium text-yellow-800 mb-1">Plazo (días) *</label>
+                                <input type="number" id="contrato-plazo" placeholder="Ej: 30" min="1" required
+                                       onchange="calcularFechaFin()"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-yellow-800 mb-1">Días Adicionales (Adendas)</label>
+                                <input type="number" id="contrato-dias-adicionales" placeholder="0" min="0" value="0"
+                                       onchange="calcularFechaFin()"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-yellow-800 mb-1">Fecha Inicio</label>
+                                <input type="text" id="contrato-fecha-inicio" readonly
+                                       class="w-full border rounded-lg px-3 py-2 bg-gray-100 text-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-yellow-800 mb-1">Fecha Fin</label>
+                                <input type="text" id="contrato-fecha-fin" readonly
+                                       class="w-full border rounded-lg px-3 py-2 bg-yellow-100 font-semibold text-yellow-800">
                             </div>
                         </div>
 
@@ -724,9 +826,9 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                         <div>
-                            <span class="text-gray-500">Fecha:</span>
+                            <span class="text-gray-500">Fecha Contrato:</span>
                             <p id="det-contrato-fecha" class="font-medium"></p>
                         </div>
                         <div>
@@ -738,6 +840,12 @@
                             <p id="det-contrato-contratante" class="font-medium"></p>
                         </div>
                         <div>
+                            <span class="text-gray-500">Item:</span>
+                            <p id="det-contrato-item" class="font-medium"></p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+                        <div>
                             <span class="text-gray-500">RUC:</span>
                             <p id="det-contrato-ruc" class="font-medium"></p>
                         </div>
@@ -745,9 +853,24 @@
                             <span class="text-gray-500">Contratado:</span>
                             <p id="det-contrato-contratado" class="font-medium"></p>
                         </div>
+                    </div>
+                    <!-- Plazos -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm p-3 bg-yellow-50 rounded-lg">
                         <div>
-                            <span class="text-gray-500">Item:</span>
-                            <p id="det-contrato-item" class="font-medium"></p>
+                            <span class="text-yellow-700">Plazo:</span>
+                            <p id="det-contrato-plazo" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-yellow-700">Días Adicionales:</span>
+                            <p id="det-contrato-dias-adicionales" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-yellow-700">Fecha Inicio:</span>
+                            <p id="det-contrato-fecha-inicio" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-yellow-700">Fecha Fin:</span>
+                            <p id="det-contrato-fecha-fin" class="font-semibold text-yellow-800"></p>
                         </div>
                     </div>
                 </div>

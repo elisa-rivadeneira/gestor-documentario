@@ -18,7 +18,9 @@ let state = {
     // Contratos
     contratoActual: null,
     archivoTemporalContrato: null,
-    adjuntosTemporalesContrato: []
+    adjuntosTemporalesContrato: [],
+    contratosOriginales: [], // Para filtros en frontend
+    contratosFiltrados: []   // Resultado de aplicar filtros
 };
 
 // ============================================
@@ -1410,26 +1412,195 @@ function restaurarHeadersTablaDocumentos() {
 async function cargarContratos() {
     const busqueda = document.getElementById('filtro-busqueda').value;
 
-    // Obtener tipos seleccionados
-    const filtroEquipamiento = document.getElementById('filtro-equipamiento');
-    const filtroMantenimiento = document.getElementById('filtro-mantenimiento');
-
-    const tipos = [];
-    if (filtroEquipamiento && filtroEquipamiento.checked) tipos.push('equipamiento');
-    if (filtroMantenimiento && filtroMantenimiento.checked) tipos.push('mantenimiento');
-
     try {
         const data = await apiListarContratos({
             busqueda: busqueda,
-            tipo_contrato: tipos.length > 0 ? tipos.join(',') : null,
             pagina: state.paginaActual,
             por_pagina: 100
         });
-        renderizarContratos(data);
+        // Guardar datos originales para filtros en frontend
+        state.contratosOriginales = data.contratos;
+        state.contratosFiltrados = [...data.contratos];
+
+        // Poblar dropdown de contratados
+        poblarDropdownContratados(data.contratos);
+
+        // Aplicar filtros actuales
+        aplicarFiltrosContratos();
     } catch (error) {
         console.error('Error al cargar contratos:', error);
         mostrarToast('Error al cargar contratos: ' + (error.message || 'Error desconocido'), 'error');
     }
+}
+
+// Poblar dropdown de contratados con valores únicos
+function poblarDropdownContratados(contratos) {
+    const select = document.getElementById('filtro-contratado');
+    if (!select) return;
+
+    const contratadosUnicos = [...new Set(contratos
+        .map(c => c.contratado)
+        .filter(c => c && c.trim() !== '')
+    )].sort();
+
+    select.innerHTML = '<option value="">-- Todos --</option>' +
+        contratadosUnicos.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+// Aplicar todos los filtros en el frontend
+function aplicarFiltrosContratos() {
+    let contratos = [...state.contratosOriginales];
+
+    // Filtro por tipo de contrato
+    const filtroEquipamiento = document.getElementById('filtro-equipamiento');
+    const filtroMantenimiento = document.getElementById('filtro-mantenimiento');
+    const tiposSeleccionados = [];
+    if (filtroEquipamiento && filtroEquipamiento.checked) tiposSeleccionados.push('equipamiento');
+    if (filtroMantenimiento && filtroMantenimiento.checked) tiposSeleccionados.push('mantenimiento');
+
+    if (tiposSeleccionados.length > 0 && tiposSeleccionados.length < 2) {
+        contratos = contratos.filter(c => tiposSeleccionados.includes(c.tipo_contrato));
+    }
+
+    // Filtro por contratado
+    const filtroContratado = document.getElementById('filtro-contratado')?.value;
+    if (filtroContratado) {
+        contratos = contratos.filter(c => c.contratado === filtroContratado);
+    }
+
+    // Filtro por fecha inicio
+    const filtroFechaInicioOp = document.getElementById('filtro-fecha-inicio-op')?.value;
+    const filtroFechaInicio = document.getElementById('filtro-fecha-inicio')?.value;
+    if (filtroFechaInicioOp && filtroFechaInicio) {
+        const fechaFiltro = new Date(filtroFechaInicio + 'T00:00:00');
+        contratos = contratos.filter(c => {
+            if (!c.fecha || !c.plazo_dias) return false;
+            const fechaContrato = new Date(c.fecha);
+            const fechaInicio = new Date(fechaContrato);
+            fechaInicio.setDate(fechaInicio.getDate() + 1);
+
+            if (filtroFechaInicioOp === '>=') return fechaInicio >= fechaFiltro;
+            if (filtroFechaInicioOp === '<=') return fechaInicio <= fechaFiltro;
+            return true;
+        });
+    }
+
+    // Filtro por fecha fin
+    const filtroFechaFinOp = document.getElementById('filtro-fecha-fin-op')?.value;
+    const filtroFechaFin = document.getElementById('filtro-fecha-fin')?.value;
+    if (filtroFechaFinOp && filtroFechaFin) {
+        const fechaFiltro = new Date(filtroFechaFin + 'T00:00:00');
+        contratos = contratos.filter(c => {
+            if (!c.fecha || !c.plazo_dias) return false;
+            const fechaContrato = new Date(c.fecha);
+            const fechaInicio = new Date(fechaContrato);
+            fechaInicio.setDate(fechaInicio.getDate() + 1);
+            const totalDias = c.plazo_dias + (c.dias_adicionales || 0);
+            const fechaFin = new Date(fechaInicio);
+            fechaFin.setDate(fechaFin.getDate() + totalDias - 1);
+
+            if (filtroFechaFinOp === '>=') return fechaFin >= fechaFiltro;
+            if (filtroFechaFinOp === '<=') return fechaFin <= fechaFiltro;
+            return true;
+        });
+    }
+
+    // Filtro por monto
+    const filtroMontoOp = document.getElementById('filtro-monto-op')?.value;
+    const filtroMonto = document.getElementById('filtro-monto')?.value;
+    if (filtroMontoOp && filtroMonto) {
+        const montoFiltro = parseFloat(filtroMonto);
+        contratos = contratos.filter(c => {
+            if (c.monto_total === null || c.monto_total === undefined) return false;
+            if (filtroMontoOp === '>=') return c.monto_total >= montoFiltro;
+            if (filtroMontoOp === '<=') return c.monto_total <= montoFiltro;
+            return true;
+        });
+    }
+
+    state.contratosFiltrados = contratos;
+
+    // Renderizar con datos filtrados
+    renderizarContratos({
+        contratos: contratos,
+        total: contratos.length,
+        pagina: 1,
+        por_pagina: 100
+    });
+}
+
+// Limpiar todos los filtros
+function limpiarFiltrosContratos() {
+    document.getElementById('filtro-equipamiento').checked = true;
+    document.getElementById('filtro-mantenimiento').checked = true;
+    document.getElementById('filtro-contratado').value = '';
+    document.getElementById('filtro-fecha-inicio-op').value = '';
+    document.getElementById('filtro-fecha-inicio').value = '';
+    document.getElementById('filtro-fecha-fin-op').value = '';
+    document.getElementById('filtro-fecha-fin').value = '';
+    document.getElementById('filtro-monto-op').value = '';
+    document.getElementById('filtro-monto').value = '';
+
+    aplicarFiltrosContratos();
+}
+
+// Descargar Excel con los contratos filtrados
+function descargarExcelContratos() {
+    const contratos = state.contratosFiltrados;
+    if (!contratos || contratos.length === 0) {
+        mostrarToast('No hay contratos para descargar', 'error');
+        return;
+    }
+
+    // Función para calcular fechas en formato YYYY-MM-DD
+    const calcularFechas = (contrato) => {
+        if (!contrato.fecha || !contrato.plazo_dias) return { inicio: '', fin: '' };
+        const fechaContrato = new Date(contrato.fecha);
+        const fechaInicio = new Date(fechaContrato);
+        fechaInicio.setDate(fechaInicio.getDate() + 1);
+        const totalDias = contrato.plazo_dias + (contrato.dias_adicionales || 0);
+        const fechaFin = new Date(fechaInicio);
+        fechaFin.setDate(fechaFin.getDate() + totalDias - 1);
+        const formatoFecha = (f) => f.toISOString().split('T')[0]; // YYYY-MM-DD
+        return { inicio: formatoFecha(fechaInicio), fin: formatoFecha(fechaFin) };
+    };
+
+    // Limpiar texto para CSV (remover comas y comillas)
+    const limpiarTexto = (texto) => {
+        if (!texto) return '';
+        return String(texto).replace(/,/g, ' ').replace(/"/g, '').replace(/\n/g, ' ').trim();
+    };
+
+    // Encabezados sin espacios
+    const headers = 'NRO,CONTRATO,TIPO,ITEM_CONTRATADO,CONTRATADO,F_INICIO,F_FIN,MONTO';
+
+    const rows = contratos.map((c, i) => {
+        const fechas = calcularFechas(c);
+        return [
+            i + 1,
+            limpiarTexto(c.numero),
+            limpiarTexto(c.tipo_contrato),
+            limpiarTexto(c.item_contratado),
+            limpiarTexto(c.contratado),
+            fechas.inicio,
+            fechas.fin,
+            c.monto_total || 0
+        ].join(',');
+    });
+
+    // CSV sin BOM, formato limpio
+    const csv = headers + '\n' + rows.join('\n');
+
+    // Descargar archivo
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const fecha = new Date().toISOString().split('T')[0];
+    link.download = `contratos_${fecha}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    mostrarToast(`Descargados ${contratos.length} contratos`);
 }
 
 function renderizarContratos(data) {
@@ -1444,10 +1615,11 @@ function renderizarContratos(data) {
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TIPO</th>
-        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FECHA</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ITEM CONTRATADO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATADO</th>
-        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MONTO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. INICIO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. FIN</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">MONTO</th>
         <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16"></th>
     `;
 
@@ -1456,7 +1628,7 @@ function renderizarContratos(data) {
     if (data.contratos.length === 0) {
         container.innerHTML = `
             <tr>
-                <td colspan="8" class="px-4 py-8 text-center">
+                <td colspan="10" class="px-4 py-8 text-center">
                     <div class="empty-state">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-12 h-12 mx-auto text-gray-400 mb-4">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1483,15 +1655,34 @@ function renderizarContratos(data) {
             '<span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">Equipamiento</span>' :
             contrato.tipo_contrato === 'mantenimiento' ?
             '<span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">Mantenimiento</span>' : '-';
+
+        // Calcular fechas de inicio y fin
+        let fechaInicioStr = '-';
+        let fechaFinStr = '-';
+        if (contrato.fecha && contrato.plazo_dias) {
+            const fechaContrato = new Date(contrato.fecha);
+            const fechaInicio = new Date(fechaContrato);
+            fechaInicio.setDate(fechaInicio.getDate() + 1);
+
+            const totalDias = contrato.plazo_dias + (contrato.dias_adicionales || 0);
+            const fechaFin = new Date(fechaInicio);
+            fechaFin.setDate(fechaFin.getDate() + totalDias - 1);
+
+            const formatoFecha = (fecha) => fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            fechaInicioStr = formatoFecha(fechaInicio);
+            fechaFinStr = formatoFecha(fechaFin);
+        }
+
         return `
         <tr class="documento-row hover:bg-gray-50">
             <td class="px-4 py-3 text-sm text-gray-900 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${offset + index + 1}</td>
             <td class="px-4 py-3 text-sm text-orange-600 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.numero || 'Sin número'}</td>
             <td class="px-4 py-3 text-sm cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${tipoLabel}</td>
-            <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearFecha(contrato.fecha)}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.item_contratado || '-'}</td>
             <td class="px-4 py-3 text-sm text-gray-900 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${contrato.contratado || '-'}</td>
-            <td class="px-4 py-3 text-sm text-green-700 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearMonto(contrato.monto_total)}</td>
+            <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${fechaInicioStr}</td>
+            <td class="px-4 py-3 text-sm text-yellow-700 font-semibold cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${fechaFinStr}</td>
+            <td class="px-4 py-3 text-sm text-green-700 font-medium text-right cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearMonto(contrato.monto_total)}</td>
             ${esAdmin ? `
             <td class="px-4 py-3 text-center">
                 <button onclick="confirmarEliminarContrato(${contrato.id}, '${(contrato.numero || '').replace(/'/g, "\\'")}'); event.stopPropagation();"
@@ -1560,6 +1751,28 @@ function renderizarDetalleContrato(contrato) {
     } else {
         detEquipamiento.classList.add('hidden');
         detMantenimiento.classList.add('hidden');
+    }
+
+    // Plazo del contrato
+    document.getElementById('det-contrato-plazo').textContent = contrato.plazo_dias ? `${contrato.plazo_dias} días` : '-';
+    document.getElementById('det-contrato-dias-adicionales').textContent = contrato.dias_adicionales ? `${contrato.dias_adicionales} días` : '0 días';
+
+    // Calcular fechas de inicio y fin
+    if (contrato.fecha && contrato.plazo_dias) {
+        const fechaContrato = new Date(contrato.fecha);
+        const fechaInicio = new Date(fechaContrato);
+        fechaInicio.setDate(fechaInicio.getDate() + 1);
+
+        const totalDias = contrato.plazo_dias + (contrato.dias_adicionales || 0);
+        const fechaFin = new Date(fechaInicio);
+        fechaFin.setDate(fechaFin.getDate() + totalDias - 1);
+
+        const formatoFecha = (fecha) => fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        document.getElementById('det-contrato-fecha-inicio').textContent = formatoFecha(fechaInicio);
+        document.getElementById('det-contrato-fecha-fin').textContent = formatoFecha(fechaFin);
+    } else {
+        document.getElementById('det-contrato-fecha-inicio').textContent = '-';
+        document.getElementById('det-contrato-fecha-fin').textContent = '-';
     }
 
     // Archivo principal
@@ -1641,6 +1854,10 @@ function limpiarFormularioContrato() {
     document.getElementById('contrato-archivo').value = '';
     document.getElementById('contrato-archivo-status').innerHTML = '';
     document.getElementById('ruc-status').innerHTML = '';
+    document.getElementById('contrato-plazo').value = '';
+    document.getElementById('contrato-dias-adicionales').value = '0';
+    document.getElementById('contrato-fecha-inicio').value = '';
+    document.getElementById('contrato-fecha-fin').value = '';
     state.archivoTemporalContrato = null;
     state.adjuntosTemporalesContrato = [];
     document.getElementById('lista-adjuntos-contrato-form').innerHTML = '';
@@ -1744,6 +1961,40 @@ function calcularMontoMantenimiento() {
     document.getElementById('contrato-monto').value = total;
 }
 
+// Calcular fecha fin de contrato
+function calcularFechaFin() {
+    const fechaInput = document.getElementById('contrato-fecha').value;
+    const plazoDias = parseInt(document.getElementById('contrato-plazo').value) || 0;
+    const diasAdicionales = parseInt(document.getElementById('contrato-dias-adicionales').value) || 0;
+
+    const fechaInicioEl = document.getElementById('contrato-fecha-inicio');
+    const fechaFinEl = document.getElementById('contrato-fecha-fin');
+
+    if (!fechaInput || plazoDias <= 0) {
+        fechaInicioEl.value = '';
+        fechaFinEl.value = '';
+        return;
+    }
+
+    // Fecha inicio = fecha contrato + 1 día
+    const fechaContrato = new Date(fechaInput + 'T00:00:00');
+    const fechaInicio = new Date(fechaContrato);
+    fechaInicio.setDate(fechaInicio.getDate() + 1);
+
+    // Fecha fin = fecha inicio + plazo días + días adicionales - 1 (porque el día de inicio cuenta)
+    const totalDias = plazoDias + diasAdicionales;
+    const fechaFin = new Date(fechaInicio);
+    fechaFin.setDate(fechaFin.getDate() + totalDias - 1);
+
+    // Formatear fechas para mostrar
+    const formatoFecha = (fecha) => {
+        return fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+
+    fechaInicioEl.value = formatoFecha(fechaInicio);
+    fechaFinEl.value = formatoFecha(fechaFin);
+}
+
 async function buscarRUC() {
     const rucInput = document.getElementById('contrato-ruc');
     const contratadoInput = document.getElementById('contrato-contratado');
@@ -1833,6 +2084,11 @@ function editarContrato() {
         }
     }
 
+    // Cargar campos de plazo
+    document.getElementById('contrato-plazo').value = contrato.plazo_dias || '';
+    document.getElementById('contrato-dias-adicionales').value = contrato.dias_adicionales || 0;
+    calcularFechaFin();
+
     if (contrato.archivo_local) {
         document.getElementById('contrato-archivo-status').innerHTML = `Archivo actual: <a href="${window.location.origin}/uploads/${contrato.archivo_local}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${contrato.archivo_local}</a>`;
     }
@@ -1857,6 +2113,8 @@ async function guardarContrato(event) {
         ruc_contratado: document.getElementById('contrato-ruc').value || null,
         contratado: document.getElementById('contrato-contratado').value || null,
         item_contratado: document.getElementById('contrato-item').value || null,
+        plazo_dias: document.getElementById('contrato-plazo').value ? parseInt(document.getElementById('contrato-plazo').value) : null,
+        dias_adicionales: document.getElementById('contrato-dias-adicionales').value ? parseInt(document.getElementById('contrato-dias-adicionales').value) : 0,
         resumen: document.getElementById('contrato-resumen').value || null,
         enlace_drive: document.getElementById('contrato-enlace').value || null
     };

@@ -102,6 +102,9 @@ class Contrato(Base):
     ruc_contratado = Column(String(11), nullable=True)  # RUC del contratado
     contratado = Column(String(255), nullable=True)  # Razón social del contratado
     item_contratado = Column(String(500), nullable=True)
+    # Campos de plazo
+    plazo_dias = Column(Integer, nullable=True)  # Número de días del contrato
+    dias_adicionales = Column(Integer, default=0)  # Días de adendas (por defecto 0)
     # Campos para EQUIPAMIENTO
     cantidad = Column(Integer, nullable=True)
     precio_unitario = Column(Float, nullable=True)  # Solo para equipamiento

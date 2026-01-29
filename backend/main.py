@@ -65,6 +65,18 @@ def migrar_contratos():
                 conn.commit()
                 print("Migración completada: columna precio_unitario agregada (NULL por defecto)")
 
+            # Agregar columna plazo_dias
+            if 'plazo_dias' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN plazo_dias INTEGER"))
+                conn.commit()
+                print("Migración completada: columna plazo_dias agregada")
+
+            # Agregar columna dias_adicionales (0 por defecto)
+            if 'dias_adicionales' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN dias_adicionales INTEGER DEFAULT 0"))
+                conn.commit()
+                print("Migración completada: columna dias_adicionales agregada (0 por defecto)")
+
             # Establecer 'mantenimiento' como valor por defecto para contratos existentes sin tipo
             result = conn.execute(text("UPDATE contratos SET tipo_contrato = 'mantenimiento' WHERE tipo_contrato IS NULL"))
             if result.rowcount > 0:

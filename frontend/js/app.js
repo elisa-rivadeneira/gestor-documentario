@@ -1698,7 +1698,7 @@ function renderizarContratos(data) {
 
         // Generar opciones del select de estado
         const estadoActual = contrato.estado_ejecucion || 'PENDIENTE';
-        const estadosOpciones = ['PENDIENTE', 'EN PROCESO', 'EN VALIDACIÓN', 'ENTREGA CONFORME'].map(e =>
+        const estadosOpciones = ['PENDIENTE', 'EN PROCESO', 'EN VALIDACIÓN', 'CONFORME'].map(e =>
             `<option value="${e}" ${e === estadoActual ? 'selected' : ''}>${e}</option>`
         ).join('');
 
@@ -1707,7 +1707,7 @@ function renderizarContratos(data) {
             'PENDIENTE': 'bg-red-100 text-red-700 border-red-300',
             'EN PROCESO': 'bg-yellow-100 text-yellow-700 border-yellow-300',
             'EN VALIDACIÓN': 'bg-blue-100 text-blue-700 border-blue-300',
-            'ENTREGA CONFORME': 'bg-green-100 text-green-700 border-green-300'
+            'CONFORME': 'bg-green-100 text-green-700 border-green-300'
         }[estadoActual] || 'bg-gray-100 text-gray-700 border-gray-300';
 
         return `
@@ -1721,10 +1721,14 @@ function renderizarContratos(data) {
             <td class="px-4 py-3 text-sm text-yellow-700 font-semibold cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${fechaFinStr}</td>
             <td class="px-4 py-3 text-sm text-green-700 font-medium text-right cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearMonto(contrato.monto_total)}</td>
             <td class="px-4 py-2 text-center">
+                ${esAdmin ? `
                 <select onchange="cambiarEstadoContrato(${contrato.id}, this.value); event.stopPropagation();"
                         class="text-xs px-2 py-1 rounded border ${colorEstado} cursor-pointer font-medium">
                     ${estadosOpciones}
                 </select>
+                ` : `
+                <span class="text-xs px-2 py-1 rounded border ${colorEstado} font-medium">${estadoActual}</span>
+                `}
             </td>
             ${esAdmin ? `
             <td class="px-4 py-3 text-center">

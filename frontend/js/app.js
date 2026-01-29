@@ -1582,8 +1582,11 @@ function descargarExcelContratos() {
     // Encabezados - usar punto y coma para Excel en español
     const headers = 'NRO;CONTRATO;TIPO;ITEM_CONTRATADO;CONTRATADO;F_INICIO;F_FIN;MONTO';
 
+    let totalMonto = 0;
     const rows = contratos.map((c, i) => {
         const fechas = calcularFechas(c);
+        const monto = c.monto_total || 0;
+        totalMonto += monto;
         return [
             i + 1,
             limpiarTexto(c.numero),
@@ -1592,12 +1595,15 @@ function descargarExcelContratos() {
             limpiarTexto(c.contratado),
             fechas.inicio,
             fechas.fin,
-            c.monto_total || 0
+            monto
         ].join(';');
     });
 
+    // Fila de total al final
+    const filaTotal = ['', '', '', '', '', '', 'TOTAL:', totalMonto.toFixed(2)].join(';');
+
     // CSV con BOM y punto y coma como separador
-    const csv = BOM + headers + '\n' + rows.join('\n');
+    const csv = BOM + headers + '\n' + rows.join('\n') + '\n' + filaTotal;
 
     // Descargar archivo
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1704,6 +1710,16 @@ function renderizarContratos(data) {
             ` : '<td></td>'}
         </tr>
     `}).join('');
+
+    // Calcular y agregar fila de total
+    const totalMonto = data.contratos.reduce((sum, c) => sum + (c.monto_total || 0), 0);
+    container.innerHTML += `
+        <tr class="bg-gray-100 font-bold border-t-2 border-gray-300">
+            <td colspan="7" class="px-4 py-3 text-sm text-right text-gray-700">TOTAL:</td>
+            <td class="px-4 py-3 text-sm text-green-700 text-right">${formatearMonto(totalMonto)}</td>
+            <td></td>
+        </tr>
+    `;
 
     renderizarPaginacion(data.total, data.pagina, data.por_pagina);
 }

@@ -1552,7 +1552,7 @@ function descargarExcelContratos() {
         return;
     }
 
-    // Función para calcular fechas en formato YYYY-MM-DD
+    // Función para calcular fechas en formato DD/MM/YYYY
     const calcularFechas = (contrato) => {
         if (!contrato.fecha || !contrato.plazo_dias) return { inicio: '', fin: '' };
         const fechaContrato = new Date(contrato.fecha);
@@ -1561,18 +1561,26 @@ function descargarExcelContratos() {
         const totalDias = contrato.plazo_dias + (contrato.dias_adicionales || 0);
         const fechaFin = new Date(fechaInicio);
         fechaFin.setDate(fechaFin.getDate() + totalDias - 1);
-        const formatoFecha = (f) => f.toISOString().split('T')[0]; // YYYY-MM-DD
+        const formatoFecha = (f) => {
+            const d = f.getDate().toString().padStart(2, '0');
+            const m = (f.getMonth() + 1).toString().padStart(2, '0');
+            const y = f.getFullYear();
+            return `${d}/${m}/${y}`;
+        };
         return { inicio: formatoFecha(fechaInicio), fin: formatoFecha(fechaFin) };
     };
 
-    // Limpiar texto para CSV (remover comas y comillas)
+    // Limpiar texto para CSV (remover punto y coma y comillas)
     const limpiarTexto = (texto) => {
         if (!texto) return '';
-        return String(texto).replace(/,/g, ' ').replace(/"/g, '').replace(/\n/g, ' ').trim();
+        return String(texto).replace(/;/g, ',').replace(/"/g, '').replace(/\n/g, ' ').trim();
     };
 
-    // Encabezados sin espacios
-    const headers = 'NRO,CONTRATO,TIPO,ITEM_CONTRATADO,CONTRATADO,F_INICIO,F_FIN,MONTO';
+    // BOM para UTF-8 en Excel
+    const BOM = '\uFEFF';
+
+    // Encabezados - usar punto y coma para Excel en español
+    const headers = 'NRO;CONTRATO;TIPO;ITEM_CONTRATADO;CONTRATADO;F_INICIO;F_FIN;MONTO';
 
     const rows = contratos.map((c, i) => {
         const fechas = calcularFechas(c);
@@ -1585,11 +1593,11 @@ function descargarExcelContratos() {
             fechas.inicio,
             fechas.fin,
             c.monto_total || 0
-        ].join(',');
+        ].join(';');
     });
 
-    // CSV sin BOM, formato limpio
-    const csv = headers + '\n' + rows.join('\n');
+    // CSV con BOM y punto y coma como separador
+    const csv = BOM + headers + '\n' + rows.join('\n');
 
     // Descargar archivo
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

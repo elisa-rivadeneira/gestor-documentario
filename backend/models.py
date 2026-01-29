@@ -113,6 +113,7 @@ class Contrato(Base):
     resumen = Column(Text, nullable=True)
     archivo_local = Column(String(500), nullable=True)
     enlace_drive = Column(String(500), nullable=True)
+    estado_ejecucion = Column(String(30), default='PENDIENTE')  # PENDIENTE, EN PROCESO, EN VALIDACIÓN, ENTREGA CONFORME
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())

@@ -77,6 +77,12 @@ def migrar_contratos():
                 conn.commit()
                 print("Migración completada: columna dias_adicionales agregada (0 por defecto)")
 
+            # Agregar columna estado_ejecucion (PENDIENTE por defecto)
+            if 'estado_ejecucion' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN estado_ejecucion VARCHAR(30) DEFAULT 'PENDIENTE'"))
+                conn.commit()
+                print("Migración completada: columna estado_ejecucion agregada (PENDIENTE por defecto)")
+
             # Establecer 'mantenimiento' como valor por defecto para contratos existentes sin tipo
             result = conn.execute(text("UPDATE contratos SET tipo_contrato = 'mantenimiento' WHERE tipo_contrato IS NULL"))
             if result.rowcount > 0:

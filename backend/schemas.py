@@ -216,6 +216,7 @@ class ContratoBase(BaseModel):
     asunto: Optional[str] = None
     resumen: Optional[str] = None
     enlace_drive: Optional[str] = None
+    estado_ejecucion: Optional[str] = 'PENDIENTE'  # PENDIENTE, EN PROCESO, EN VALIDACIÓN, ENTREGA CONFORME
 
 
 class ContratoCreate(ContratoBase):
@@ -240,6 +241,7 @@ class ContratoUpdate(BaseModel):
     asunto: Optional[str] = None
     resumen: Optional[str] = None
     enlace_drive: Optional[str] = None
+    estado_ejecucion: Optional[str] = None
     comisarias: Optional[List[ComisariaContratoCreate]] = None
 
 

@@ -1580,7 +1580,7 @@ function descargarExcelContratos() {
     const BOM = '\uFEFF';
 
     // Encabezados - usar punto y coma para Excel en español
-    const headers = 'NRO;CONTRATO;TIPO;ITEM_CONTRATADO;CONTRATADO;F_INICIO;F_FIN;MONTO';
+    const headers = 'NRO;CONTRATO;TIPO;ITEM_CONTRATADO;CONTRATADO;F_INICIO;F_FIN;MONTO;ESTADO';
 
     let totalMonto = 0;
     const rows = contratos.map((c, i) => {
@@ -1595,12 +1595,13 @@ function descargarExcelContratos() {
             limpiarTexto(c.contratado),
             fechas.inicio,
             fechas.fin,
-            monto
+            monto,
+            limpiarTexto(c.estado_ejecucion || 'PENDIENTE')
         ].join(';');
     });
 
     // Fila de total al final
-    const filaTotal = ['', '', '', '', '', '', 'TOTAL:', totalMonto.toFixed(2)].join(';');
+    const filaTotal = ['', '', '', '', '', '', 'TOTAL:', totalMonto.toFixed(2), ''].join(';');
 
     // CSV con BOM y punto y coma como separador
     const csv = BOM + headers + '\n' + rows.join('\n') + '\n' + filaTotal;
@@ -1634,6 +1635,7 @@ function renderizarContratos(data) {
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. INICIO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. FIN</th>
         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">MONTO</th>
+        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ESTADO</th>
         <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16"></th>
     `;
 
@@ -1642,7 +1644,7 @@ function renderizarContratos(data) {
     if (data.contratos.length === 0) {
         container.innerHTML = `
             <tr>
-                <td colspan="10" class="px-4 py-8 text-center">
+                <td colspan="11" class="px-4 py-8 text-center">
                     <div class="empty-state">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-12 h-12 mx-auto text-gray-400 mb-4">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1687,6 +1689,20 @@ function renderizarContratos(data) {
             fechaFinStr = formatoFecha(fechaFin);
         }
 
+        // Generar opciones del select de estado
+        const estadoActual = contrato.estado_ejecucion || 'PENDIENTE';
+        const estadosOpciones = ['PENDIENTE', 'EN PROCESO', 'EN VALIDACIÓN', 'ENTREGA CONFORME'].map(e =>
+            `<option value="${e}" ${e === estadoActual ? 'selected' : ''}>${e}</option>`
+        ).join('');
+
+        // Colores según estado
+        const colorEstado = {
+            'PENDIENTE': 'bg-red-100 text-red-700 border-red-300',
+            'EN PROCESO': 'bg-yellow-100 text-yellow-700 border-yellow-300',
+            'EN VALIDACIÓN': 'bg-blue-100 text-blue-700 border-blue-300',
+            'ENTREGA CONFORME': 'bg-green-100 text-green-700 border-green-300'
+        }[estadoActual] || 'bg-gray-100 text-gray-700 border-gray-300';
+
         return `
         <tr class="documento-row hover:bg-gray-50">
             <td class="px-4 py-3 text-sm text-gray-900 font-medium cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${offset + index + 1}</td>
@@ -1697,6 +1713,12 @@ function renderizarContratos(data) {
             <td class="px-4 py-3 text-sm text-gray-600 cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${fechaInicioStr}</td>
             <td class="px-4 py-3 text-sm text-yellow-700 font-semibold cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${fechaFinStr}</td>
             <td class="px-4 py-3 text-sm text-green-700 font-medium text-right cursor-pointer" onclick="verDetalleContrato(${contrato.id})">${formatearMonto(contrato.monto_total)}</td>
+            <td class="px-4 py-2 text-center">
+                <select onchange="cambiarEstadoContrato(${contrato.id}, this.value); event.stopPropagation();"
+                        class="text-xs px-2 py-1 rounded border ${colorEstado} cursor-pointer font-medium">
+                    ${estadosOpciones}
+                </select>
+            </td>
             ${esAdmin ? `
             <td class="px-4 py-3 text-center">
                 <button onclick="confirmarEliminarContrato(${contrato.id}, '${(contrato.numero || '').replace(/'/g, "\\'")}'); event.stopPropagation();"
@@ -1715,13 +1737,31 @@ function renderizarContratos(data) {
     const totalMonto = data.contratos.reduce((sum, c) => sum + (c.monto_total || 0), 0);
     container.innerHTML += `
         <tr class="bg-gray-100 font-bold border-t-2 border-gray-300">
-            <td colspan="7" class="px-4 py-3 text-sm text-right text-gray-700">TOTAL:</td>
+            <td colspan="8" class="px-4 py-3 text-sm text-right text-gray-700">TOTAL:</td>
             <td class="px-4 py-3 text-sm text-green-700 text-right">${formatearMonto(totalMonto)}</td>
-            <td></td>
+            <td colspan="2"></td>
         </tr>
     `;
 
     renderizarPaginacion(data.total, data.pagina, data.por_pagina);
+}
+
+// Cambiar estado de ejecución desde el index
+async function cambiarEstadoContrato(id, nuevoEstado) {
+    try {
+        await apiActualizarContrato(id, { estado_ejecucion: nuevoEstado });
+
+        // Actualizar en el array local
+        const contrato = state.contratosOriginales.find(c => c.id === id);
+        if (contrato) contrato.estado_ejecucion = nuevoEstado;
+        const contratoFiltrado = state.contratosFiltrados.find(c => c.id === id);
+        if (contratoFiltrado) contratoFiltrado.estado_ejecucion = nuevoEstado;
+
+        mostrarToast('Estado actualizado');
+        aplicarFiltrosContratos(); // Re-renderizar para actualizar colores
+    } catch (error) {
+        mostrarToast('Error al actualizar estado: ' + error.message, 'error');
+    }
 }
 
 async function verDetalleContrato(id) {
@@ -1873,6 +1913,7 @@ function limpiarFormularioContrato() {
     document.getElementById('contrato-monto').value = '';
     document.getElementById('contrato-num-comisarias').value = '1';
     document.getElementById('contrato-monto-mantenimiento').value = '';
+    document.getElementById('contrato-estado-ejecucion').value = 'PENDIENTE';
     document.getElementById('contrato-resumen').value = '';
     document.getElementById('contrato-enlace').value = '';
     document.getElementById('contrato-archivo').value = '';
@@ -2079,6 +2120,7 @@ function editarContrato() {
     document.getElementById('contrato-contratado').value = contrato.contratado || '';
     document.getElementById('contrato-item').value = contrato.item_contratado || '';
     document.getElementById('contrato-monto').value = contrato.monto_total || '';
+    document.getElementById('contrato-estado-ejecucion').value = contrato.estado_ejecucion || 'PENDIENTE';
     document.getElementById('contrato-resumen').value = contrato.resumen || '';
     document.getElementById('contrato-enlace').value = contrato.enlace_drive || '';
 
@@ -2139,6 +2181,7 @@ async function guardarContrato(event) {
         item_contratado: document.getElementById('contrato-item').value || null,
         plazo_dias: document.getElementById('contrato-plazo').value ? parseInt(document.getElementById('contrato-plazo').value) : null,
         dias_adicionales: document.getElementById('contrato-dias-adicionales').value ? parseInt(document.getElementById('contrato-dias-adicionales').value) : 0,
+        estado_ejecucion: document.getElementById('contrato-estado-ejecucion').value || 'PENDIENTE',
         resumen: document.getElementById('contrato-resumen').value || null,
         enlace_drive: document.getElementById('contrato-enlace').value || null
     };

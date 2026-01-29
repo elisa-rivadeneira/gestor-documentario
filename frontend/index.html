@@ -732,6 +732,17 @@
                         <input type="hidden" id="contrato-monto">
 
                         <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Estado de Ejecución</label>
+                            <select id="contrato-estado-ejecucion"
+                                    class="w-full border rounded-lg px-3 py-2 bg-white">
+                                <option value="PENDIENTE">PENDIENTE</option>
+                                <option value="EN PROCESO">EN PROCESO</option>
+                                <option value="EN VALIDACIÓN">EN VALIDACIÓN</option>
+                                <option value="ENTREGA CONFORME">ENTREGA CONFORME</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Resumen (opcional)</label>
                             <textarea id="contrato-resumen" rows="3" placeholder="Resumen del contrato"
                                       class="w-full border rounded-lg px-3 py-2 bg-white"></textarea>

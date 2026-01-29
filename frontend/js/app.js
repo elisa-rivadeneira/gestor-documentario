@@ -1518,6 +1518,12 @@ function aplicarFiltrosContratos() {
         });
     }
 
+    // Filtro por estado
+    const filtroEstado = document.getElementById('filtro-estado')?.value;
+    if (filtroEstado) {
+        contratos = contratos.filter(c => (c.estado_ejecucion || 'PENDIENTE') === filtroEstado);
+    }
+
     state.contratosFiltrados = contratos;
 
     // Renderizar con datos filtrados
@@ -1540,6 +1546,7 @@ function limpiarFiltrosContratos() {
     document.getElementById('filtro-fecha-fin').value = '';
     document.getElementById('filtro-monto-op').value = '';
     document.getElementById('filtro-monto').value = '';
+    document.getElementById('filtro-estado').value = '';
 
     aplicarFiltrosContratos();
 }

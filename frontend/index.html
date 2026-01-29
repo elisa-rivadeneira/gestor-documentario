@@ -178,6 +178,18 @@
                                        class="border rounded px-2 py-1.5 text-sm bg-white w-28">
                             </div>
                         </div>
+                        <!-- Filtro Estado -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 mb-1">Estado</label>
+                            <select id="filtro-estado" onchange="aplicarFiltrosContratos()"
+                                    class="border rounded px-2 py-1.5 text-sm bg-white min-w-[140px]">
+                                <option value="">-- Todos --</option>
+                                <option value="PENDIENTE">PENDIENTE</option>
+                                <option value="EN PROCESO">EN PROCESO</option>
+                                <option value="EN VALIDACIÓN">EN VALIDACIÓN</option>
+                                <option value="ENTREGA CONFORME">ENTREGA CONFORME</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <!-- Campos ocultos para filtros -->

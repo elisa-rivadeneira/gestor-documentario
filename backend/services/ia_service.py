@@ -121,15 +121,15 @@ def extraer_numero_con_ocr(ruta_pdf: str) -> str:
 
     # Buscar patrones de número de oficio/carta en el ENCABEZADO
     patrones = [
-        # Carta N° 001-2026-NEMAEC/PRESIDENCIA (formato NEMAEC - prioridad alta)
-        r'Carta\s*N[°º]?\s*(\d{3})\s*-\s*(\d{4})\s*-\s*(NEMAEC/PRESIDENCIA)',
+        # Carta N° 000100-2026-NEMAEC/PRESIDENCIA (formato NEMAEC - prioridad alta, 1-6 dígitos)
+        r'Carta\s*N[°º]?\s*(\d{1,6})\s*-\s*(\d{4})\s*-\s*(NEMAEC\S*)',
         # OFICIO N° 000035-2026-MIDIS/FONCODES/UGPE
         r'OFICIO\s*N[°º]?\s*(\d{5,6})\s*-\s*(\d{4})\s*-\s*(\S+)',
         # CARTA N° 000035-2026-MIDIS/FONCODES/UGPE
-        r'CARTA\s*N[°º]?\s*(\d{5,6})\s*-\s*(\d{4})\s*-\s*(\S+)',
+        r'CARTA\s*N[°º]?\s*(\d{1,6})\s*-\s*(\d{4})\s*-\s*(\S+)',
         # Formatos más flexibles
         r'OFICIO\s*N[°º]?\s*(\d{3,6})\s*-\s*(\d{4})',
-        r'CARTA\s*N[°º]?\s*(\d{3,6})\s*-\s*(\d{4})',
+        r'CARTA\s*N[°º]?\s*(\d{1,6})\s*-\s*(\d{4})',
     ]
 
     for patron in patrones:
@@ -194,12 +194,23 @@ def extraer_numero_oficio(texto: str) -> str:
     anio = ""
 
     # 1. Buscar el número correlativo en el nombre del archivo (si no es nombre corto de Windows)
+    es_carta_nombre = False
     match_nombre = re.search(r'NOMBRE DEL ARCHIVO:\s*(.+?)\.pdf', texto, re.IGNORECASE)
     if match_nombre:
         nombre_archivo = match_nombre.group(1).strip()
         # Ignorar nombres cortos de Windows (como OFICIO~1)
         if '~' not in nombre_archivo:
-            # Buscar patrón: OFICIO-000030-2026 o similar
+            # Detectar si el nombre del archivo indica que es una Carta
+            es_carta_nombre = bool(re.search(r'carta', nombre_archivo, re.IGNORECASE))
+
+            # Buscar formato NEMAEC en el nombre: Carta N° 000100-2026-NEMAEC
+            patron_nemaec_nombre = re.search(r'Carta\s*N[°º]?\s*(\d{1,6})\s*-\s*(\d{4})\s*-\s*NEMAEC', nombre_archivo, re.IGNORECASE)
+            if patron_nemaec_nombre:
+                numero_correlativo = patron_nemaec_nombre.group(1).zfill(6)
+                anio = patron_nemaec_nombre.group(2)
+                return f"Carta N° {numero_correlativo}-{anio}-NEMAEC/PRESIDENCIA"
+
+            # Buscar patrón genérico: 000030-2026 o similar
             patron_numero = re.search(r'(\d{5,6})[- ]?(\d{4})', nombre_archivo)
             if patron_numero:
                 numero_correlativo = patron_numero.group(1)
@@ -215,10 +226,10 @@ def extraer_numero_oficio(texto: str) -> str:
             if pos > 0 and pos < len(texto_encabezado):
                 texto_encabezado = texto[:pos]
 
-        # Primero buscar formato NEMAEC: Carta N° 001-2026-NEMAEC/PRESIDENCIA
-        patron_nemaec = re.search(r'Carta\s*N[°º]?\s*(\d{3})\s*-\s*(\d{4})\s*-\s*(NEMAEC/PRESIDENCIA)', texto_encabezado, re.IGNORECASE)
+        # Primero buscar formato NEMAEC: Carta N° 000100-2026-NEMAEC (1-6 dígitos)
+        patron_nemaec = re.search(r'Carta\s*N[°º]?\s*(\d{1,6})\s*-\s*(\d{4})\s*-\s*NEMAEC', texto_encabezado, re.IGNORECASE)
         if patron_nemaec:
-            numero_correlativo = patron_nemaec.group(1).zfill(3)
+            numero_correlativo = patron_nemaec.group(1).zfill(6)
             anio = patron_nemaec.group(2)
             return f"Carta N° {numero_correlativo}-{anio}-NEMAEC/PRESIDENCIA"
 
@@ -227,6 +238,19 @@ def extraer_numero_oficio(texto: str) -> str:
         if patron_pdf:
             numero_correlativo = patron_pdf.group(1)
             anio = patron_pdf.group(2)
+
+        # Buscar "CARTA N°00100-2026" genérica (no NEMAEC)
+        if not numero_correlativo:
+            patron_carta = re.search(r'CARTA\s*N[°º]?\s*(\d{1,6})\s*-\s*(\d{4})', texto_encabezado, re.IGNORECASE)
+            if patron_carta:
+                numero_correlativo = patron_carta.group(1).zfill(6)
+                anio = patron_carta.group(2)
+                sufijo = "MIDIS/FONCODES/UGPE"
+                # Buscar sufijo real en el texto
+                match_sufijo = re.search(r'CARTA\s*N[°º]?\s*\d{1,6}\s*-\s*\d{4}\s*-\s*(\S+)', texto_encabezado, re.IGNORECASE)
+                if match_sufijo:
+                    sufijo = match_sufijo.group(1)
+                return f"CARTA N°{numero_correlativo}-{anio}-{sufijo}"
 
     # 3. Si aún no tenemos número, NO inventar uno - dejar que la IA lo extraiga
     # Pero sí extraer el año si lo encontramos
@@ -237,9 +261,12 @@ def extraer_numero_oficio(texto: str) -> str:
         else:
             anio = "2026"  # Año por defecto
 
-    # 4. Formatear el número correlativo (5 dígitos) solo si lo encontramos
+    # 4. Formatear el número correlativo solo si lo encontramos
     if numero_correlativo:
-        numero_correlativo = numero_correlativo.zfill(5)
+        numero_correlativo = numero_correlativo.zfill(6)
+        # Si el nombre del archivo indica que es carta, formatear como carta
+        if es_carta_nombre:
+            return f"Carta N° {numero_correlativo}-{anio}-NEMAEC/PRESIDENCIA"
         return f"OFICIO N°{numero_correlativo}-{anio}-MIDIS/FONCODES/UGPE"
 
     # Si no encontramos número, retornar vacío para que la IA lo maneje

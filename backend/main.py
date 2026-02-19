@@ -628,10 +628,11 @@ async def analizar_archivo_con_ia(
         resultado["mensaje"] = "Análisis completado (número extraído con OCR)"
     else:
         # Verificar si el número de oficio tiene el formato correcto
-        # Acepta 5-6 dígitos para oficios O 3 dígitos para cartas NEMAEC
+        # Acepta 5-6 dígitos para oficios O 1-6 dígitos para cartas NEMAEC O carta genérica
         numero_actual = resultado.get("numero_oficio", "")
         es_nemaec = "NEMAEC" in numero_actual.upper()
-        tiene_numero_valido = bool(re.search(r'\d{5,6}', numero_actual)) or (es_nemaec and bool(re.search(r'\d{3}', numero_actual)))
+        es_carta = "CARTA" in numero_actual.upper()
+        tiene_numero_valido = bool(re.search(r'\d{5,6}', numero_actual)) or (es_nemaec and bool(re.search(r'\d{1,6}', numero_actual))) or (es_carta and bool(re.search(r'\d{1,6}', numero_actual)))
 
         # Si no se encontró número válido y OCR está disponible, intentar con OCR
         if not tiene_numero_valido and OCR_DISPONIBLE:

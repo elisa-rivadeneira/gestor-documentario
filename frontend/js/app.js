@@ -1649,6 +1649,12 @@ function sortContratos(columna) {
     const dir = state.contratosSortDir === 'asc' ? 1 : -1;
 
     state.contratosFiltrados.sort((a, b) => {
+        if (columna === 'numero') {
+            return dir * (a.numero || '').localeCompare(b.numero || '', 'es');
+        }
+        if (columna === 'contratado') {
+            return dir * (a.contratado || '').localeCompare(b.contratado || '', 'es');
+        }
         if (columna === 'item_contratado') {
             return dir * (a.item_contratado || '').localeCompare(b.item_contratado || '', 'es');
         }
@@ -1681,10 +1687,10 @@ function renderizarContratos(data) {
     const thead = container.closest('table').querySelector('thead tr');
     thead.innerHTML = `
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRO</th>
-        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700" onclick="sortContratos('numero')">CONTRATO ${sortIconContrato('numero')}</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TIPO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700" onclick="sortContratos('item_contratado')">ITEM CONTRATADO ${sortIconContrato('item_contratado')}</th>
-        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CONTRATADO</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700" onclick="sortContratos('contratado')">CONTRATADO ${sortIconContrato('contratado')}</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. INICIO</th>
         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. FIN</th>
         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[130px] cursor-pointer select-none hover:text-gray-700" onclick="sortContratos('monto_total')">MONTO ${sortIconContrato('monto_total')}</th>

@@ -264,3 +264,41 @@ class ContratoListResponse(BaseModel):
     total: int
     pagina: int
     por_pagina: int
+
+
+# ─── Expediente por Contrato ────────────────────────────────────────────────
+
+class ExpedienteContratoCreate(BaseModel):
+    tipo_doc: str   # Carta Recibida | Carta Enviada | Informe Técnico | Acta | Oficio | Otro
+    numero: Optional[str] = None
+    fecha: Optional[datetime] = None
+    asunto: Optional[str] = None
+    enlace_drive: Optional[str] = None
+    notas: Optional[str] = None
+    archivo_temporal: Optional[str] = None
+
+
+class ExpedienteContratoUpdate(BaseModel):
+    tipo_doc: Optional[str] = None
+    numero: Optional[str] = None
+    fecha: Optional[datetime] = None
+    asunto: Optional[str] = None
+    enlace_drive: Optional[str] = None
+    notas: Optional[str] = None
+    archivo_temporal: Optional[str] = None
+
+
+class ExpedienteContratoResponse(BaseModel):
+    id: int
+    contrato_id: int
+    tipo_doc: str
+    numero: Optional[str] = None
+    fecha: Optional[datetime] = None
+    asunto: Optional[str] = None
+    archivo_local: Optional[str] = None
+    enlace_drive: Optional[str] = None
+    notas: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

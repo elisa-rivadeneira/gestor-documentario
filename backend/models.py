@@ -120,6 +120,7 @@ class Contrato(Base):
 
     adjuntos = relationship("AdjuntoContrato", back_populates="contrato", cascade="all, delete-orphan")
     comisarias = relationship("ComisariaContrato", back_populates="contrato", cascade="all, delete-orphan")
+    expediente = relationship("ExpedienteContrato", back_populates="contrato", cascade="all, delete-orphan")
 
 
 class ComisariaContrato(Base):
@@ -136,6 +137,29 @@ class ComisariaContrato(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     contrato = relationship("Contrato", back_populates="comisarias")
+
+
+class ExpedienteContrato(Base):
+    """
+    Expediente histórico de un contrato.
+    Registra toda la documentación generada durante la vida del contrato:
+    cartas, informes técnicos, actas, oficios, etc.
+    """
+    __tablename__ = "expediente_contrato"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contrato_id = Column(Integer, ForeignKey("contratos.id"), nullable=False)
+    tipo_doc = Column(String(30), nullable=False)   # Carta Recibida | Carta Enviada | Informe Técnico | Acta | Oficio | Otro
+    numero = Column(String(150), nullable=True)
+    fecha = Column(DateTime, nullable=True)
+    asunto = Column(String(500), nullable=True)
+    archivo_local = Column(String(500), nullable=True)
+    enlace_drive = Column(String(500), nullable=True)
+    notas = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    contrato = relationship("Contrato", back_populates="expediente")
 
 
 class AdjuntoContrato(Base):

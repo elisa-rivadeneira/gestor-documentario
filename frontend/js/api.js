@@ -407,6 +407,34 @@ async function apiConsultarRUC(ruc) {
 }
 
 // ============================================
+// EXPEDIENTE POR CONTRATO
+// ============================================
+
+async function apiListarExpediente(contratoId) {
+    return await fetchAPI(`/contratos/${contratoId}/expediente`);
+}
+
+async function apiCrearExpediente(contratoId, data) {
+    return await fetchAPI(`/contratos/${contratoId}/expediente`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+}
+
+async function apiActualizarExpediente(itemId, data) {
+    return await fetchAPI(`/expediente/${itemId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+    });
+}
+
+async function apiEliminarExpediente(itemId) {
+    return await fetchAPI(`/expediente/${itemId}`, {
+        method: 'DELETE',
+    });
+}
+
+// ============================================
 // UTILIDADES
 // ============================================
 

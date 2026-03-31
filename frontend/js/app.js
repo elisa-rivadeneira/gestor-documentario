@@ -2527,6 +2527,281 @@ async function subirAdjuntosTemporalesContrato(contratoId) {
 // FIN CONTRATOS
 // ============================================
 
+// ============================================
+// CORRESPONDENCIA POR CONTRATO
+// ============================================
+
+// Configuración de tipos de documento del expediente
+const TIPOS_EXPEDIENTE = [
+    { value: 'Carta Recibida',    label: '📥 Carta Recibida',    color: 'border-green-400',  badge: 'bg-green-100 text-green-700' },
+    { value: 'Carta Enviada',     label: '📤 Carta Enviada',     color: 'border-blue-400',   badge: 'bg-blue-100 text-blue-700' },
+    { value: 'Informe Técnico',   label: '📋 Informe Técnico',   color: 'border-purple-400', badge: 'bg-purple-100 text-purple-700' },
+    { value: 'Acta',              label: '📝 Acta',              color: 'border-orange-400', badge: 'bg-orange-100 text-orange-700' },
+    { value: 'Oficio',            label: '📄 Oficio',            color: 'border-indigo-400', badge: 'bg-indigo-100 text-indigo-700' },
+    { value: 'Otro',              label: '📎 Otro',              color: 'border-gray-400',   badge: 'bg-gray-100 text-gray-700' },
+];
+
+// Estado del expediente
+state.expedienteItems = [];
+state.archivoTemporalExpediente = null;
+
+function _tipoExpedienteConfig(tipoDoc) {
+    return TIPOS_EXPEDIENTE.find(t => t.value === tipoDoc) || TIPOS_EXPEDIENTE[TIPOS_EXPEDIENTE.length - 1];
+}
+
+async function verExpedienteContrato() {
+    const contrato = state.contratoActual;
+    if (!contrato) return;
+    document.getElementById('exp-contrato-nombre').textContent =
+        `${contrato.numero || 'Sin número'} — ${contrato.contratado || ''}`;
+    mostrarVista('vista-expediente-contrato');
+    await cargarExpediente(contrato.id);
+    const btnNuevo = document.getElementById('btn-nuevo-expediente');
+    if (estaAutenticado()) btnNuevo.classList.remove('hidden');
+    else btnNuevo.classList.add('hidden');
+}
+
+async function cargarExpediente(contratoId) {
+    try {
+        const items = await apiListarExpediente(contratoId);
+        state.expedienteItems = items;
+        renderizarExpediente(items);
+    } catch (error) {
+        mostrarToast('Error al cargar expediente: ' + error.message, 'error');
+    }
+}
+
+function _renderCardContrato(contrato) {
+    const fechaStr = contrato.fecha
+        ? new Date(contrato.fecha).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : '—';
+    let archivoLink = '';
+    if (contrato.archivo_local) {
+        archivoLink = `<a href="${window.location.origin}/uploads/${contrato.archivo_local}" target="_blank"
+            class="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            Ver contrato</a>`;
+    } else if (contrato.enlace_drive) {
+        archivoLink = `<a href="${contrato.enlace_drive}" target="_blank"
+            class="text-blue-600 hover:text-blue-800 text-xs">Ver en Drive</a>`;
+    }
+    return `
+    <div class="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-400">
+        <div class="flex items-start gap-2 flex-wrap mb-2">
+            <span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">📜 Contrato</span>
+            <span class="text-xs text-gray-500">${fechaStr}</span>
+        </div>
+        ${contrato.numero ? `<p class="text-sm font-semibold text-gray-800 mb-1">${contrato.numero}</p>` : ''}
+        ${contrato.item_contratado ? `<p class="text-sm text-gray-700 mb-1">${contrato.item_contratado}</p>` : ''}
+        ${archivoLink ? `<div class="mt-2">${archivoLink}</div>` : ''}
+    </div>`;
+}
+
+function renderizarExpediente(items) {
+    const lista = document.getElementById('exp-lista');
+    const badges = document.getElementById('exp-badges');
+    const total = items.length + 1; // +1 por el contrato
+
+    badges.innerHTML = `<span class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">${total} documento${total !== 1 ? 's' : ''}</span>`;
+
+    const cardContrato = _renderCardContrato(state.contratoActual);
+
+    if (items.length === 0) {
+        lista.innerHTML = cardContrato + `
+            <div class="bg-white rounded-lg shadow p-6 text-center text-gray-400 text-sm">
+                No hay documentos adicionales en el expediente.
+            </div>`;
+        return;
+    }
+
+    lista.innerHTML = cardContrato + items.map(item => {
+        const cfg = _tipoExpedienteConfig(item.tipo_doc);
+        const fechaStr = item.fecha
+            ? new Date(item.fecha).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : '—';
+
+        let archivoLink = '';
+        if (item.archivo_local) {
+            archivoLink = `<a href="${window.location.origin}/uploads/${item.archivo_local}" target="_blank"
+                class="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                </svg>
+                Ver PDF</a>`;
+        } else if (item.enlace_drive) {
+            archivoLink = `<a href="${item.enlace_drive}" target="_blank"
+                class="text-blue-600 hover:text-blue-800 text-xs">Ver en Drive</a>`;
+        }
+
+        const adminButtons = estaAutenticado() ? `
+            <div class="flex gap-2 ml-auto">
+                <button onclick="editarExpediente(${item.id})" class="text-gray-400 hover:text-yellow-600 p-1 rounded" title="Editar">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                </button>
+                <button onclick="confirmarEliminarExpediente(${item.id})" class="text-gray-400 hover:text-red-600 p-1 rounded" title="Eliminar">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>` : '';
+
+        return `
+        <div class="bg-white rounded-lg shadow p-4 border-l-4 ${cfg.color}">
+            <div class="flex items-start gap-2 flex-wrap mb-2">
+                <span class="px-2 py-0.5 ${cfg.badge} rounded text-xs font-medium">${cfg.label}</span>
+                <span class="text-xs text-gray-500">${fechaStr}</span>
+                ${adminButtons}
+            </div>
+            ${item.numero ? `<p class="text-sm font-semibold text-gray-800 mb-1">${item.numero}</p>` : ''}
+            ${item.asunto ? `<p class="text-sm text-gray-700 mb-1">${item.asunto}</p>` : ''}
+            ${item.notas ? `<p class="text-xs text-gray-500 italic mb-1">${item.notas}</p>` : ''}
+            ${archivoLink ? `<div class="mt-2">${archivoLink}</div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function mostrarFormularioNuevoExpediente() {
+    limpiarFormularioExpediente();
+    document.getElementById('exp-form-titulo').textContent = 'Agregar documento al expediente';
+    mostrarVista('vista-formulario-expediente');
+}
+
+function limpiarFormularioExpediente() {
+    document.getElementById('exp-id').value = '';
+    document.getElementById('exp-tipo').value = '';
+    document.getElementById('exp-numero').value = '';
+    document.getElementById('exp-fecha').value = '';
+    document.getElementById('exp-asunto').value = '';
+    document.getElementById('exp-archivo').value = '';
+    document.getElementById('exp-archivo-status').textContent = '';
+    document.getElementById('exp-enlace').value = '';
+    document.getElementById('exp-notas').value = '';
+    state.archivoTemporalExpediente = null;
+}
+
+function editarExpediente(id) {
+    const item = state.expedienteItems.find(i => i.id === id);
+    if (!item) return;
+    limpiarFormularioExpediente();
+    document.getElementById('exp-form-titulo').textContent = 'Editar documento';
+    document.getElementById('exp-id').value = item.id;
+    document.getElementById('exp-tipo').value = item.tipo_doc;
+    document.getElementById('exp-numero').value = item.numero || '';
+    document.getElementById('exp-fecha').value = item.fecha ? item.fecha.split('T')[0] : '';
+    document.getElementById('exp-asunto').value = item.asunto || '';
+    document.getElementById('exp-enlace').value = item.enlace_drive || '';
+    document.getElementById('exp-notas').value = item.notas || '';
+    if (item.archivo_local) {
+        document.getElementById('exp-archivo-status').textContent = `Archivo actual: ${item.archivo_local}`;
+    }
+    mostrarVista('vista-formulario-expediente');
+}
+
+async function guardarExpediente(event) {
+    event.preventDefault();
+    const itemId = document.getElementById('exp-id').value;
+    const contrato = state.contratoActual;
+    if (!contrato) return;
+
+    const archivoInput = document.getElementById('exp-archivo');
+    if (archivoInput.files[0]) {
+        try {
+            const statusEl = document.getElementById('exp-archivo-status');
+            statusEl.textContent = 'Subiendo archivo...';
+            const resultado = await apiSubirArchivoTemporal(archivoInput.files[0]);
+            state.archivoTemporalExpediente = resultado.archivo;
+            statusEl.textContent = 'Archivo listo';
+        } catch (error) {
+            mostrarToast('Error al subir archivo: ' + error.message, 'error');
+            return;
+        }
+    }
+
+    const data = {
+        tipo_doc: document.getElementById('exp-tipo').value,
+        numero: document.getElementById('exp-numero').value || null,
+        fecha: document.getElementById('exp-fecha').value || null,
+        asunto: document.getElementById('exp-asunto').value || null,
+        enlace_drive: document.getElementById('exp-enlace').value || null,
+        notas: document.getElementById('exp-notas').value || null,
+        archivo_temporal: state.archivoTemporalExpediente || null,
+    };
+
+    try {
+        if (itemId) {
+            await apiActualizarExpediente(itemId, data);
+            mostrarToast('Documento actualizado');
+        } else {
+            await apiCrearExpediente(contrato.id, data);
+            mostrarToast('Documento agregado al expediente');
+        }
+        state.archivoTemporalExpediente = null;
+        mostrarVista('vista-expediente-contrato');
+        await cargarExpediente(contrato.id);
+    } catch (error) {
+        mostrarToast('Error: ' + error.message, 'error');
+    }
+}
+
+async function confirmarEliminarExpediente(id) {
+    const item = state.expedienteItems.find(i => i.id === id);
+    const label = item ? (item.numero || item.asunto || `ID ${id}`) : `ID ${id}`;
+    if (!confirm(`¿Eliminar "${label}" del expediente?`)) return;
+    try {
+        await apiEliminarExpediente(id);
+        mostrarToast('Documento eliminado');
+        await cargarExpediente(state.contratoActual.id);
+    } catch (error) {
+        mostrarToast('Error: ' + error.message, 'error');
+    }
+}
+
+async function analizarConIAExpediente() {
+    const archivoInput = document.getElementById('exp-archivo');
+    if (!archivoInput.files[0]) {
+        mostrarToast('Primero seleccione un archivo PDF', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btn-analizar-exp');
+    const statusEl = document.getElementById('exp-archivo-status');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analizando...';
+    statusEl.textContent = 'Subiendo y analizando con IA...';
+
+    try {
+        const resultadoSubida = await apiSubirArchivoTemporal(archivoInput.files[0]);
+        state.archivoTemporalExpediente = resultadoSubida.archivo;
+
+        const resultado = await apiAnalizarArchivo(resultadoSubida.archivo);
+
+        if (resultado.exito) {
+            if (resultado.numero_oficio) document.getElementById('exp-numero').value = resultado.numero_oficio;
+            if (resultado.fecha && resultado.fecha.length >= 10)
+                document.getElementById('exp-fecha').value = resultado.fecha.substring(0, 10);
+            if (resultado.asunto) document.getElementById('exp-asunto').value = resultado.asunto;
+            if (resultado.resumen) document.getElementById('exp-notas').value = resultado.resumen;
+            statusEl.innerHTML = `<span class="text-green-600">✓ Archivo listo · Campos completados por IA</span>`;
+            mostrarToast('Análisis completado');
+        } else {
+            statusEl.innerHTML = `<span class="text-yellow-600">Archivo subido · ${resultado.mensaje}</span>`;
+        }
+    } catch (error) {
+        statusEl.innerHTML = '<span class="text-red-600">Error al analizar</span>';
+        mostrarToast('Error: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347a3.026 3.026 0 00-.551 2.311l.029.186a1 1 0 01-.793 1.176l-.189.038a3.027 3.027 0 00-2.256 2.256l-.038.189a1 1 0 01-1.176.793l-.186-.029a3.026 3.026 0 00-2.311.551l-.347.347a5 5 0 11-7.072-7.072l-.347-.347a3.026 3.026 0 00-.551-2.311l-.029-.186a1 1 0 01.793-1.176l.189-.038a3.027 3.027 0 002.256-2.256l.038-.189a1 1 0 011.176-.793l.186.029a3.026 3.026 0 002.311-.551l.347-.347z"/>
+        </svg> Analizar con IA`;
+    }
+}
+
+// ============================================
 // Debounce para búsqueda
 function debounce(func, wait) {
     let timeout;

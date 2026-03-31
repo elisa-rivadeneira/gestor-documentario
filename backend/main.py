@@ -16,13 +16,14 @@ from sqlalchemy import or_
 import pdfplumber
 
 from database import engine, get_db, Base
-from models import Documento, Adjunto, Usuario, Contrato, AdjuntoContrato, ComisariaContrato
+from models import Documento, Adjunto, Usuario, Contrato, AdjuntoContrato, ComisariaContrato, ExpedienteContrato
 from schemas import (
     DocumentoCreate, DocumentoUpdate, DocumentoResponse, DocumentoListResponse,
     AdjuntoCreate, AdjuntoResponse, AnalisisIARequest, AnalisisIAResponse,
     LoginRequest, LoginResponse, UsuarioResponse,
     ContratoCreate, ContratoUpdate, ContratoResponse, ContratoListResponse,
-    AdjuntoContratoResponse
+    AdjuntoContratoResponse,
+    ExpedienteContratoCreate, ExpedienteContratoUpdate, ExpedienteContratoResponse
 )
 from services.ia_service import ia_service, extraer_numero_con_ocr, OCR_DISPONIBLE
 from services.auth_service import hash_password, verify_password, create_token, verify_token
@@ -1099,6 +1100,120 @@ async def consultar_ruc(ruc: str, admin: dict = Depends(verificar_admin)):
             "exito": False,
             "mensaje": f"Error de conexión: {str(e)}"
         }
+
+
+# ============================================
+# EXPEDIENTE POR CONTRATO
+# ============================================
+
+def _mover_archivo_expediente(nombre_temporal: str, contrato_id: int) -> str:
+    """Mueve un archivo temporal a su nombre definitivo para el expediente."""
+    ruta_temporal = os.path.join(UPLOAD_DIR, nombre_temporal)
+    if not os.path.exists(ruta_temporal):
+        raise HTTPException(status_code=404, detail="Archivo temporal no encontrado")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    partes = nombre_temporal.split('_', 3)
+    nombre_original = partes[3] if len(partes) > 3 else nombre_temporal
+    nuevo_nombre = f"exp_{contrato_id}_{timestamp}_{nombre_original}"
+    os.rename(ruta_temporal, os.path.join(UPLOAD_DIR, nuevo_nombre))
+    return nuevo_nombre
+
+
+@app.get("/api/contratos/{contrato_id}/expediente", response_model=List[ExpedienteContratoResponse])
+def listar_expediente_contrato(
+    contrato_id: int,
+    db: Session = Depends(get_db)
+):
+    """Lista todo el expediente de un contrato, ordenado por fecha asc (cronológico)."""
+    contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+    items = (
+        db.query(ExpedienteContrato)
+        .filter(ExpedienteContrato.contrato_id == contrato_id)
+        .order_by(ExpedienteContrato.fecha.asc().nullslast(), ExpedienteContrato.created_at.asc())
+        .all()
+    )
+    return items
+
+
+@app.post("/api/contratos/{contrato_id}/expediente", response_model=ExpedienteContratoResponse)
+def crear_expediente_contrato(
+    contrato_id: int,
+    data: ExpedienteContratoCreate,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Agrega un documento al expediente de un contrato."""
+    contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+
+    archivo_local = None
+    if data.archivo_temporal:
+        archivo_local = _mover_archivo_expediente(data.archivo_temporal, contrato_id)
+
+    item = ExpedienteContrato(
+        contrato_id=contrato_id,
+        tipo_doc=data.tipo_doc,
+        numero=data.numero,
+        fecha=data.fecha,
+        asunto=data.asunto,
+        archivo_local=archivo_local,
+        enlace_drive=data.enlace_drive,
+        notas=data.notas,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.put("/api/expediente/{item_id}", response_model=ExpedienteContratoResponse)
+def actualizar_expediente(
+    item_id: int,
+    data: ExpedienteContratoUpdate,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Actualiza un documento del expediente."""
+    item = db.query(ExpedienteContrato).filter(ExpedienteContrato.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    if data.archivo_temporal:
+        if item.archivo_local:
+            ruta_anterior = os.path.join(UPLOAD_DIR, item.archivo_local)
+            if os.path.exists(ruta_anterior):
+                os.remove(ruta_anterior)
+        item.archivo_local = _mover_archivo_expediente(data.archivo_temporal, item.contrato_id)
+
+    update_data = data.model_dump(exclude_unset=True, exclude={'archivo_temporal'})
+    for field, value in update_data.items():
+        setattr(item, field, value)
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.delete("/api/expediente/{item_id}", status_code=204)
+def eliminar_expediente(
+    item_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Elimina un documento del expediente."""
+    item = db.query(ExpedienteContrato).filter(ExpedienteContrato.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    if item.archivo_local:
+        ruta = os.path.join(UPLOAD_DIR, item.archivo_local)
+        if os.path.exists(ruta):
+            os.remove(ruta)
+    db.delete(item)
+    db.commit()
+    return None
 
 
 # ============================================

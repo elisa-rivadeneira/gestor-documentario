@@ -32,12 +32,27 @@ let state = {
 document.addEventListener('DOMContentLoaded', () => {
     // Verificar autenticación y actualizar UI
     actualizarUIAutenticacion();
-    // Si está autenticado, mostrar oficios; si no, mostrar contratos (público)
-    if (estaAutenticado()) {
+
+    // Si la URL es /seguimiento, navegar directo a esa vista
+    if (window.location.pathname === '/seguimiento') {
+        filtrarPorCategoria('seguimiento');
+    } else if (estaAutenticado()) {
         filtrarPorCategoria('oficios');
     } else {
         filtrarPorCategoria('contratos');
     }
+
+    // Preview numeración en tiempo real
+    document.addEventListener('input', (e) => {
+        if (e.target.id === 'config-sufijo' || e.target.id === 'config-digitos') {
+            actualizarPreviewNumeracion();
+        }
+    });
+    document.addEventListener('change', (e) => {
+        if (e.target.id === 'config-digitos') {
+            actualizarPreviewNumeracion();
+        }
+    });
 });
 
 // ============================================
@@ -177,38 +192,40 @@ function filtrarPorCategoria(categoria) {
             colReferencia.classList.remove('hidden');
             // Cambiar título de columna a CARTA
             colDocumento.textContent = 'CARTA';
+            // Mostrar botón Nueva Carta IA
+            document.getElementById('barra-nueva-carta').classList.remove('hidden');
             break;
         case 'oficios':
             // Todos los oficios
             filtroTipo.value = 'oficio';
             filtroDireccion.value = '';
-            // Ocultar columna y filtro de referencia
             filtroReferencia.classList.add('hidden');
             colReferencia.classList.add('hidden');
-            // Cambiar título de columna a OFICIO
             colDocumento.textContent = 'OFICIO';
+            document.getElementById('barra-nueva-carta').classList.add('hidden');
             break;
         case 'cartas-recibidas':
-            // Cartas recibidas
             filtroTipo.value = 'carta';
             filtroDireccion.value = 'recibido';
-            // Ocultar columna y filtro de referencia
             filtroReferencia.classList.add('hidden');
             colReferencia.classList.add('hidden');
-            // Cambiar título de columna a CARTA
             colDocumento.textContent = 'CARTA';
+            document.getElementById('barra-nueva-carta').classList.add('hidden');
             break;
         case 'contratos':
-            // Contratos - usa su propio flujo
             filtroReferencia.classList.add('hidden');
             colReferencia.classList.add('hidden');
             colDocumento.textContent = 'CONTRATO';
-            // Cambiar título de la bandeja
             document.getElementById('titulo-bandeja').textContent = 'Contratos';
-            // Mostrar filtros de tipo de contrato
             document.getElementById('filtros-tipo-contrato').classList.remove('hidden');
+            document.getElementById('barra-nueva-carta').classList.add('hidden');
             actualizarBotonesMenu(categoria);
             cargarContratos();
+            return;
+        case 'seguimiento':
+            actualizarBotonesMenu(categoria);
+            mostrarVista('vista-seguimiento');
+            cargarSeguimiento();
             return;
     }
 
@@ -220,7 +237,7 @@ function filtrarPorCategoria(categoria) {
 }
 
 function actualizarBotonesMenu(categoriaActiva) {
-    const botones = ['cartas-nemaec', 'oficios', 'cartas-recibidas', 'contratos'];
+    const botones = ['cartas-nemaec', 'oficios', 'cartas-recibidas', 'contratos', 'seguimiento'];
 
     botones.forEach(cat => {
         const btn = document.getElementById(`btn-${cat}`);
@@ -666,8 +683,11 @@ async function renderizarDetalle(doc) {
 
     // Archivo principal
     const archivoContainer = document.getElementById('det-archivo');
-    if (doc.archivo_local) {
-        archivoContainer.innerHTML = `
+    const esCartaIA = doc.tipo_documento === 'carta' && doc.direccion === 'enviado';
+    if (doc.archivo_local || doc.archivo_docx) {
+        let enlaces = '';
+        if (doc.archivo_local) {
+            enlaces += `
             <a href="${window.location.origin}/uploads/${doc.archivo_local}" target="_blank"
                class="link-documento flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -675,8 +695,20 @@ async function renderizarDetalle(doc) {
                           d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                 </svg>
                 Ver PDF
-            </a>
-        `;
+            </a>`;
+        }
+        if (esCartaIA && doc.archivo_docx) {
+            enlaces += `
+            <a href="${window.location.origin}/uploads/${doc.archivo_docx}" download
+               class="link-documento flex items-center gap-2 text-blue-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/>
+                </svg>
+                Descargar Word
+            </a>`;
+        }
+        archivoContainer.innerHTML = `<div class="flex flex-wrap gap-4">${enlaces}</div>`;
     } else if (doc.enlace_drive) {
         archivoContainer.innerHTML = `
             <a href="${doc.enlace_drive}" target="_blank"
@@ -804,8 +836,29 @@ function editarDocumento() {
     document.getElementById('doc-resumen').value = doc.resumen || '';
     document.getElementById('doc-enlace').value = doc.enlace_drive || '';
 
-    if (doc.archivo_local) {
-        document.getElementById('archivo-status').innerHTML = `Archivo actual: <a href="${window.location.origin}/uploads/${doc.archivo_local}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${doc.archivo_local}</a>`;
+    // Mostrar archivos disponibles (PDF y/o Word para cartas IA)
+    const archivoStatusEl = document.getElementById('archivo-status');
+    const esCartaIAEdicion = doc.tipo_documento === 'carta' && doc.direccion === 'enviado';
+    if (doc.archivo_local || doc.archivo_docx) {
+        let html = '<div class="flex flex-wrap gap-3 mt-1">';
+        if (doc.archivo_local) {
+            html += `<a href="${window.location.origin}/uploads/${doc.archivo_local}" target="_blank"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                </svg>Ver PDF</a>`;
+        }
+        if (esCartaIAEdicion && doc.archivo_docx) {
+            html += `<a href="${window.location.origin}/uploads/${doc.archivo_docx}" download
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm hover:bg-blue-100 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/>
+                </svg>Descargar Word</a>`;
+        }
+        html += '</div>';
+        archivoStatusEl.innerHTML = html;
+    } else if (doc.archivo_local) {
+        archivoStatusEl.innerHTML = `Archivo actual: <a href="${window.location.origin}/uploads/${doc.archivo_local}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${doc.archivo_local}</a>`;
     }
 
     // Activar la lógica de cambio de tipo para mostrar/ocultar campos
@@ -1849,9 +1902,30 @@ function renderizarDetalleContrato(contrato) {
     document.getElementById('det-contrato-fecha').textContent = contrato.fecha ? formatearFecha(contrato.fecha) : '-';
     document.getElementById('det-contrato-tipo').textContent = contrato.tipo_contrato ? capitalizar(contrato.tipo_contrato) : '-';
     document.getElementById('det-contrato-contratante').textContent = contrato.contratante || '-';
-    document.getElementById('det-contrato-ruc').textContent = contrato.ruc_contratado || '-';
+    const tipoContratado = contrato.tipo_contratado || 'empresa';
+    document.getElementById('det-contrato-tipo-contratado').textContent = tipoContratado;
     document.getElementById('det-contrato-contratado').textContent = contrato.contratado || '-';
+    // Mostrar RUC solo si es empresa
+    const bloqueRuc = document.getElementById('det-bloque-ruc');
+    if (tipoContratado === 'empresa') {
+        bloqueRuc.classList.remove('hidden');
+        document.getElementById('det-contrato-ruc').textContent = contrato.ruc_contratado || '-';
+    } else {
+        bloqueRuc.classList.add('hidden');
+    }
     document.getElementById('det-contrato-item').textContent = contrato.item_contratado || '-';
+
+    // Representante
+    const bloqueRep = document.getElementById('det-representante-bloque');
+    if (contrato.nombre_representante || contrato.cargo_representante) {
+        bloqueRep.classList.remove('hidden');
+        document.getElementById('det-contrato-nombre-representante').textContent = contrato.nombre_representante || '-';
+        document.getElementById('det-contrato-cargo-representante').textContent = contrato.cargo_representante || '-';
+        document.getElementById('det-contrato-email-representante').textContent = contrato.email_representante || '-';
+        document.getElementById('det-contrato-whatsapp-representante').textContent = contrato.whatsapp_representante || '-';
+    } else {
+        bloqueRep.classList.add('hidden');
+    }
     document.getElementById('det-contrato-resumen').textContent = contrato.resumen || 'No hay resumen disponible';
 
     // Mostrar sección según tipo de contrato
@@ -1973,8 +2047,10 @@ function limpiarFormularioContrato() {
     document.getElementById('contrato-fecha').value = '';
     document.getElementById('contrato-tipo').value = '';
     document.getElementById('contrato-contratante').value = 'NEMAEC';
+    cambiarTipoContratado('empresa');
     document.getElementById('contrato-ruc').value = '';
     document.getElementById('contrato-contratado').value = '';
+    document.getElementById('contrato-nombre-consorcio').value = '';
     document.getElementById('contrato-item').value = '';
     document.getElementById('contrato-cantidad').value = '';
     document.getElementById('contrato-precio-unitario').value = '';
@@ -1992,6 +2068,10 @@ function limpiarFormularioContrato() {
     document.getElementById('contrato-dias-adicionales').value = '0';
     document.getElementById('contrato-fecha-inicio').value = '';
     document.getElementById('contrato-fecha-fin').value = '';
+    document.getElementById('contrato-nombre-representante').value = '';
+    document.getElementById('contrato-cargo-representante').value = '';
+    document.getElementById('contrato-email-representante').value = '';
+    document.getElementById('contrato-whatsapp-representante').value = '';
     state.archivoTemporalContrato = null;
     state.adjuntosTemporalesContrato = [];
     document.getElementById('lista-adjuntos-contrato-form').innerHTML = '';
@@ -2035,6 +2115,49 @@ function cambiarTipoContrato() {
         camposEquipamiento.classList.add('hidden');
         camposMantenimiento.classList.add('hidden');
     }
+}
+
+function cambiarTipoContratado(tipo) {
+    document.getElementById('contrato-tipo-contratado').value = tipo;
+
+    const btnEmpresa = document.getElementById('btn-tipo-empresa');
+    const btnConsorcio = document.getElementById('btn-tipo-consorcio');
+    const bloqueEmpresa = document.getElementById('bloque-empresa');
+    const bloqueConsorcio = document.getElementById('bloque-consorcio');
+    const rucInput = document.getElementById('contrato-ruc');
+
+    if (tipo === 'empresa') {
+        btnEmpresa.classList.add('bg-blue-600', 'text-white');
+        btnEmpresa.classList.remove('bg-white', 'text-blue-700');
+        btnConsorcio.classList.add('bg-white', 'text-blue-700');
+        btnConsorcio.classList.remove('bg-blue-600', 'text-white');
+        bloqueEmpresa.classList.remove('hidden');
+        bloqueConsorcio.classList.add('hidden');
+        rucInput.required = true;
+        // Sugerir cargo si está vacío
+        const cargo = document.getElementById('contrato-cargo-representante');
+        if (!cargo.value) cargo.placeholder = 'Ej: Gerente General';
+    } else {
+        btnConsorcio.classList.add('bg-blue-600', 'text-white');
+        btnConsorcio.classList.remove('bg-white', 'text-blue-700');
+        btnEmpresa.classList.add('bg-white', 'text-blue-700');
+        btnEmpresa.classList.remove('bg-blue-600', 'text-white');
+        bloqueEmpresa.classList.add('hidden');
+        bloqueConsorcio.classList.remove('hidden');
+        rucInput.required = false;
+        rucInput.value = '';
+        document.getElementById('ruc-status').textContent = '';
+        // Sugerir cargo si está vacío
+        const cargo = document.getElementById('contrato-cargo-representante');
+        if (!cargo.value) cargo.placeholder = 'Ej: Representante Común';
+    }
+}
+
+function sugerirCargo() {
+    const tipo = document.getElementById('contrato-tipo-contratado').value;
+    const cargoInput = document.getElementById('contrato-cargo-representante');
+    cargoInput.value = tipo === 'consorcio' ? 'Representante Común' : 'Gerente General';
+    cargoInput.focus();
 }
 
 // Calcular monto total para equipamiento
@@ -2185,11 +2308,22 @@ function editarContrato() {
     document.getElementById('contrato-fecha').value = contrato.fecha ? contrato.fecha.split('T')[0] : '';
     document.getElementById('contrato-tipo').value = contrato.tipo_contrato || '';
     document.getElementById('contrato-contratante').value = contrato.contratante || '';
-    document.getElementById('contrato-ruc').value = contrato.ruc_contratado || '';
-    document.getElementById('contrato-contratado').value = contrato.contratado || '';
+    // Tipo de contratado: empresa o consorcio
+    const tipoContratado = contrato.tipo_contratado || 'empresa';
+    cambiarTipoContratado(tipoContratado);
+    if (tipoContratado === 'consorcio') {
+        document.getElementById('contrato-nombre-consorcio').value = contrato.contratado || '';
+    } else {
+        document.getElementById('contrato-ruc').value = contrato.ruc_contratado || '';
+        document.getElementById('contrato-contratado').value = contrato.contratado || '';
+    }
     document.getElementById('contrato-item').value = contrato.item_contratado || '';
     document.getElementById('contrato-monto').value = contrato.monto_total || '';
     document.getElementById('contrato-estado-ejecucion').value = contrato.estado_ejecucion || 'PENDIENTE';
+    document.getElementById('contrato-nombre-representante').value = contrato.nombre_representante || '';
+    document.getElementById('contrato-cargo-representante').value = contrato.cargo_representante || '';
+    document.getElementById('contrato-email-representante').value = contrato.email_representante || '';
+    document.getElementById('contrato-whatsapp-representante').value = contrato.whatsapp_representante || '';
     document.getElementById('contrato-resumen').value = contrato.resumen || '';
     document.getElementById('contrato-enlace').value = contrato.enlace_drive || '';
 
@@ -2245,14 +2379,22 @@ async function guardarContrato(event) {
         fecha: document.getElementById('contrato-fecha').value || null,
         tipo_contrato: tipoContrato || null,
         contratante: document.getElementById('contrato-contratante').value || null,
-        ruc_contratado: document.getElementById('contrato-ruc').value || null,
-        contratado: document.getElementById('contrato-contratado').value || null,
+        tipo_contratado: document.getElementById('contrato-tipo-contratado').value || 'empresa',
+        ruc_contratado: document.getElementById('contrato-tipo-contratado').value === 'empresa'
+            ? (document.getElementById('contrato-ruc').value || null) : null,
+        contratado: document.getElementById('contrato-tipo-contratado').value === 'consorcio'
+            ? (document.getElementById('contrato-nombre-consorcio').value || null)
+            : (document.getElementById('contrato-contratado').value || null),
         item_contratado: document.getElementById('contrato-item').value || null,
         plazo_dias: document.getElementById('contrato-plazo').value ? parseInt(document.getElementById('contrato-plazo').value) : null,
         dias_adicionales: document.getElementById('contrato-dias-adicionales').value ? parseInt(document.getElementById('contrato-dias-adicionales').value) : 0,
         estado_ejecucion: document.getElementById('contrato-estado-ejecucion').value || 'PENDIENTE',
         resumen: document.getElementById('contrato-resumen').value || null,
-        enlace_drive: document.getElementById('contrato-enlace').value || null
+        enlace_drive: document.getElementById('contrato-enlace').value || null,
+        nombre_representante: document.getElementById('contrato-nombre-representante').value || null,
+        cargo_representante: document.getElementById('contrato-cargo-representante').value || null,
+        email_representante: document.getElementById('contrato-email-representante').value || null,
+        whatsapp_representante: document.getElementById('contrato-whatsapp-representante').value || null,
     };
 
     // Campos según tipo de contrato
@@ -2798,6 +2940,878 @@ async function analizarConIAExpediente() {
         btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347a3.026 3.026 0 00-.551 2.311l.029.186a1 1 0 01-.793 1.176l-.189.038a3.027 3.027 0 00-2.256 2.256l-.038.189a1 1 0 01-1.176.793l-.186-.029a3.026 3.026 0 00-2.311.551l-.347.347a5 5 0 11-7.072-7.072l-.347-.347a3.026 3.026 0 00-.551-2.311l-.029-.186a1 1 0 01.793-1.176l.189-.038a3.027 3.027 0 002.256-2.256l.038-.189a1 1 0 011.176-.793l.186.029a3.026 3.026 0 002.311-.551l.347-.347z"/>
         </svg> Analizar con IA`;
+    }
+}
+
+// ============================================
+// PLANTILLAS DE CARTA
+// ============================================
+
+async function mostrarPlantillas() {
+    mostrarVista('vista-plantillas');
+    switchTabCartas('config');
+    await Promise.all([cargarEstadoMembrete(), cargarConfigNumeracion(), cargarConfigFirma(), cargarPlantillas()]);
+}
+
+function switchTabCartas(tab) {
+    const isConfig = tab === 'config';
+    document.getElementById('panel-config').classList.toggle('hidden', !isConfig);
+    document.getElementById('panel-plantillas').classList.toggle('hidden', isConfig);
+    document.getElementById('tab-config').className = `px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition ${isConfig ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`;
+    document.getElementById('tab-plantillas').className = `px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition ${!isConfig ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`;
+}
+
+async function cargarConfigFirma() {
+    try {
+        const data = await fetchAPI('/configuracion/firma');
+        document.getElementById('config-firma-nombre').value = data.nombre || '';
+        document.getElementById('config-firma-cargo').value = data.cargo || '';
+        const estadoEl = document.getElementById('firma-imagen-estado');
+        if (data.imagen_url) {
+            estadoEl.innerHTML = `
+                <div class="flex items-center gap-3 p-2 bg-green-50 border border-green-200 rounded-lg">
+                    <img src="${data.imagen_url}" class="h-10 object-contain bg-gray-100 rounded border px-1">
+                    <span class="text-xs text-green-800 font-medium">Firma cargada</span>
+                    <button onclick="eliminarFirmaImagen()" class="ml-auto text-red-500 hover:text-red-700 text-xs">Eliminar</button>
+                </div>`;
+        } else {
+            estadoEl.innerHTML = `<p class="text-xs text-gray-400">Sin firma digital — se mostrará solo la línea de firma.</p>`;
+        }
+    } catch(e) {}
+}
+
+async function guardarConfigFirma() {
+    const nombre = document.getElementById('config-firma-nombre').value.trim();
+    const cargo = document.getElementById('config-firma-cargo').value.trim();
+    if (!nombre || !cargo) { mostrarToast('Ingresa nombre y cargo', 'error'); return; }
+    try {
+        await fetchAPI('/configuracion/firma', {
+            method: 'POST',
+            body: JSON.stringify({ nombre, cargo })
+        });
+        mostrarToast('Firma guardada');
+    } catch(e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function subirFirmaImagen() {
+    const archivo = document.getElementById('config-firma-imagen').files[0];
+    if (!archivo) { mostrarToast('Selecciona una imagen', 'error'); return; }
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    try {
+        const token = getToken();
+        const resp = await fetch('/api/configuracion/firma/imagen', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Error al subir');
+        document.getElementById('config-firma-imagen').value = '';
+        mostrarToast('Imagen de firma subida');
+        await cargarConfigFirma();
+    } catch(e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function eliminarFirmaImagen() {
+    try {
+        await fetchAPI('/configuracion/firma/imagen', { method: 'DELETE' });
+        mostrarToast('Imagen eliminada');
+        await cargarConfigFirma();
+    } catch(e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function cargarConfigNumeracion() {
+    try {
+        const data = await fetchAPI('/configuracion/numeracion');
+        document.getElementById('config-sufijo').value = data.sufijo || '';
+        document.getElementById('config-digitos').value = data.digitos || 6;
+        actualizarPreviewNumeracion();
+    } catch(e) {}
+}
+
+function actualizarPreviewNumeracion() {
+    const sufijo = document.getElementById('config-sufijo').value.trim();
+    const digitos = parseInt(document.getElementById('config-digitos').value) || 6;
+    const anio = new Date().getFullYear();
+    const num = '1'.padStart(digitos, '0');
+    const preview = sufijo ? `Carta N° ${num}-${anio}-${sufijo}` : `Carta N° ${num}-${anio}`;
+    document.getElementById('config-preview').textContent = preview;
+}
+
+async function guardarConfigNumeracion() {
+    const sufijo = document.getElementById('config-sufijo').value.trim();
+    const digitos = parseInt(document.getElementById('config-digitos').value);
+    try {
+        await fetchAPI('/configuracion/numeracion', {
+            method: 'POST',
+            body: JSON.stringify({ sufijo, digitos })
+        });
+        mostrarToast('Configuración guardada');
+        actualizarPreviewNumeracion();
+    } catch(e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function cargarPlantillas() {
+    const contenedor = document.getElementById('lista-plantillas');
+    try {
+        const plantillas = await fetchAPI('/plantillas-carta');
+        if (!plantillas || plantillas.length === 0) {
+            contenedor.innerHTML = '<p class="text-gray-400 text-sm">No hay plantillas cargadas aún.</p>';
+            return;
+        }
+        contenedor.innerHTML = plantillas.map(p => `
+            <div class="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+                <div>
+                    <p class="font-medium text-sm">${p.nombre}</p>
+                    ${p.descripcion ? `<p class="text-xs text-gray-500">${p.descripcion}</p>` : ''}
+                    <p class="text-xs text-gray-400 mt-1">Subida: ${p.created_at ? new Date(p.created_at).toLocaleDateString('es-PE') : '-'}</p>
+                </div>
+                <div class="flex gap-2">
+                    ${p.archivo_local ? `
+                        <a href="${window.location.origin}/uploads/${p.archivo_local}" target="_blank"
+                           class="text-blue-600 hover:text-blue-800 text-xs underline">Ver</a>
+                    ` : ''}
+                    <button onclick="eliminarPlantilla(${p.id})"
+                            class="text-red-500 hover:text-red-700 text-xs">Eliminar</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        contenedor.innerHTML = '<p class="text-red-400 text-sm">Error al cargar plantillas.</p>';
+    }
+}
+
+async function subirPlantilla() {
+    const nombre = document.getElementById('plantilla-nombre').value.trim();
+    const descripcion = document.getElementById('plantilla-descripcion').value.trim();
+    const archivo = document.getElementById('plantilla-archivo').files[0];
+
+    if (!nombre) { mostrarToast('Ingresa un nombre para la plantilla', 'error'); return; }
+    if (!archivo) { mostrarToast('Selecciona un archivo .docx', 'error'); return; }
+
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+
+    try {
+        const token = getToken();
+        const params = new URLSearchParams({ nombre });
+        if (descripcion) params.append('descripcion', descripcion);
+
+        const resp = await fetch(`/api/plantillas-carta?${params}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Error al subir');
+
+        mostrarToast('Plantilla subida correctamente');
+        document.getElementById('plantilla-nombre').value = '';
+        document.getElementById('plantilla-descripcion').value = '';
+        document.getElementById('plantilla-archivo').value = '';
+        await cargarPlantillas();
+    } catch (e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+function toggleFormNuevaPlantilla() {
+    const form = document.getElementById('form-nueva-plantilla');
+    if (!form) return;
+    form.classList.toggle('hidden');
+    if (!form.classList.contains('hidden')) {
+        document.getElementById('carta-plantilla-nombre').focus();
+    }
+}
+
+async function subirNuevaPlantillaCarta() {
+    const nombre = document.getElementById('carta-plantilla-nombre').value.trim();
+    const archivo = document.getElementById('carta-plantilla-archivo').files[0];
+
+    if (!nombre) { mostrarToast('Ingresa un nombre para la plantilla', 'error'); return; }
+    if (!archivo) { mostrarToast('Selecciona un archivo .docx', 'error'); return; }
+
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+
+    try {
+        const token = getToken();
+        const params = new URLSearchParams({ nombre });
+        const resp = await fetch(`/api/plantillas-carta?${params}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Error al subir');
+        const nueva = await resp.json();
+
+        // Recargar opciones del select
+        const plantillas = await fetchAPI('/plantillas-carta');
+        const sel = document.getElementById('carta-plantilla-id');
+        sel.innerHTML = '<option value="">Sin plantilla (usar estructura estándar)</option>';
+        (plantillas || []).forEach(p => {
+            sel.innerHTML += `<option value="${p.id}" data-archivo="${p.archivo_local || ''}">${p.nombre}</option>`;
+        });
+
+        // Seleccionar la recién subida
+        sel.value = nueva.id;
+        toggleVerPlantilla();
+
+        // Limpiar y cerrar formulario
+        document.getElementById('carta-plantilla-nombre').value = '';
+        document.getElementById('carta-plantilla-archivo').value = '';
+        document.getElementById('form-nueva-plantilla').classList.add('hidden');
+        mostrarToast('Plantilla subida y seleccionada');
+    } catch (e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+function toggleVerPlantilla() {
+    const sel = document.getElementById('carta-plantilla-id');
+    const btn = document.getElementById('btn-ver-plantilla');
+    const opt = sel.selectedOptions[0];
+    const archivo = opt ? opt.dataset.archivo : '';
+    if (archivo) {
+        btn.href = `${window.location.origin}/uploads/${archivo}`;
+        btn.classList.remove('hidden');
+    } else {
+        btn.classList.add('hidden');
+    }
+}
+
+async function cargarEstadoMembrete() {
+    try {
+        const data = await fetchAPI('/membrete');
+        const el = document.getElementById('membrete-estado');
+        if (!el) return;
+        if (data && data.archivo) {
+            el.innerHTML = `
+                <div class="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <span class="text-sm text-green-800 font-medium">Membrete configurado</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="${data.url}" target="_blank" class="text-blue-600 hover:text-blue-800 text-xs underline">Ver</a>
+                        <button onclick="eliminarMembrete()" class="text-red-500 hover:text-red-700 text-xs">Eliminar</button>
+                    </div>
+                </div>`;
+        } else {
+            el.innerHTML = `<p class="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">Sin membrete — las cartas se generarán sin encabezado de página.</p>`;
+        }
+    } catch(e) {}
+}
+
+async function subirMembrete() {
+    const archivo = document.getElementById('membrete-archivo').files[0];
+    if (!archivo) { mostrarToast('Selecciona un archivo .docx', 'error'); return; }
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    try {
+        const token = getToken();
+        const resp = await fetch('/api/membrete', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Error al subir');
+        document.getElementById('membrete-archivo').value = '';
+        mostrarToast('Membrete subido correctamente');
+        await cargarEstadoMembrete();
+    } catch(e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function eliminarMembrete() {
+    const confirm = await Swal.fire({
+        title: '¿Eliminar membrete?',
+        text: 'Las cartas se generarán sin encabezado de página.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Eliminar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc2626'
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+        await fetchAPI('/membrete', { method: 'DELETE' });
+        mostrarToast('Membrete eliminado');
+        await cargarEstadoMembrete();
+    } catch(e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function eliminarPlantilla(id) {
+    const confirm = await Swal.fire({
+        title: '¿Eliminar plantilla?',
+        text: 'Esta acción no se puede deshacer.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Eliminar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444',
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+        await fetchAPI(`/plantillas-carta/${id}`, { method: 'DELETE' });
+        mostrarToast('Plantilla eliminada');
+        await cargarPlantillas();
+    } catch (e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+
+// ============================================
+// CREADOR DE CARTAS CON IA
+// ============================================
+
+// Abre el creador sin contrato preseleccionado (desde bandeja)
+async function mostrarCreadorCartaLibre() {
+    state.contratoActual = null;
+    await _abrirCreadorCarta();
+}
+
+// Abre el creador con el contrato actual ya cargado (desde detalle contrato)
+async function mostrarCreadorCarta() {
+    const contrato = state.contratoActual;
+    if (!contrato) return;
+    await _abrirCreadorCarta(contrato);
+}
+
+async function _abrirCreadorCarta(contrato = null) {
+
+    // Cargar plantillas en el select
+    try {
+        const plantillas = await fetchAPI('/plantillas-carta');
+        const sel = document.getElementById('carta-plantilla-id');
+        sel.innerHTML = '<option value="">Sin plantilla (estructura estándar)</option>';
+        (plantillas || []).forEach(p => {
+            sel.innerHTML += `<option value="${p.id}" data-archivo="${p.archivo_local || ''}">${p.nombre}</option>`;
+        });
+    } catch (e) { /* ignora */ }
+
+    // Limpiar buscador
+    document.getElementById('carta-buscar-input').value = '';
+    document.getElementById('carta-buscar-resultados').classList.add('hidden');
+    document.getElementById('carta-buscar-resultados').innerHTML = '';
+
+    // Mostrar/ocultar bloque de contrato según si viene preseleccionado
+    if (contrato) {
+        _cargarContratoEnCarta(contrato);
+    } else {
+        document.getElementById('carta-sin-contrato').classList.remove('hidden');
+        document.getElementById('carta-con-contrato').classList.add('hidden');
+    }
+
+    // Reset vista
+    window._cartaContratoId = null;
+    document.getElementById('carta-vacia').classList.remove('hidden');
+    document.getElementById('carta-generada').classList.add('hidden');
+    document.getElementById('btn-exportar-carta').classList.add('hidden');
+    const btnGuardar = document.getElementById('btn-guardar-carta');
+    if (btnGuardar) { btnGuardar.textContent = 'Guardar carta'; btnGuardar.classList.replace('bg-gray-400','bg-blue-600'); btnGuardar.disabled = false; }
+    document.getElementById('carta-asunto').value = '';
+    document.getElementById('carta-referencias').value = '';
+    document.getElementById('carta-instrucciones').value = '';
+    // Cerrar formulario de nueva plantilla si quedó abierto
+    document.getElementById('form-nueva-plantilla').classList.add('hidden');
+    document.getElementById('carta-plantilla-nombre').value = '';
+    document.getElementById('carta-plantilla-archivo').value = '';
+
+    mostrarVista('vista-creador-carta');
+}
+
+function _cargarContratoEnCarta(contrato) {
+    state.contratoActual = contrato;
+    window._cartaContratoId = contrato.id;
+    document.getElementById('carta-contrato-nombre').textContent = contrato.numero || 'Sin número';
+    document.getElementById('carta-contrato-item').textContent = contrato.item_contratado || '';
+    document.getElementById('carta-destinatario-nombre').textContent = contrato.nombre_representante || contrato.contratado || '—';
+    document.getElementById('carta-destinatario-cargo').textContent = contrato.cargo_representante || '—';
+    document.getElementById('carta-destinatario-institucion').textContent = contrato.contratado || '—';
+    document.getElementById('carta-sin-contrato').classList.add('hidden');
+    document.getElementById('carta-con-contrato').classList.remove('hidden');
+    // Limpiar resultados de búsqueda
+    document.getElementById('carta-buscar-resultados').classList.add('hidden');
+    document.getElementById('carta-buscar-input').value = '';
+}
+
+const debounceBuscarContratos = debounce(buscarContratosParaCarta, 250);
+
+async function buscarContratosParaCarta() {
+    const q = document.getElementById('carta-buscar-input').value.trim();
+    const contenedor = document.getElementById('carta-buscar-resultados');
+
+    try {
+        const url = q.length > 0
+            ? `/contratos?busqueda=${encodeURIComponent(q)}&por_pagina=8`
+            : `/contratos?por_pagina=8`;
+        const data = await fetchAPI(url);
+        const contratos = data.contratos || [];
+        if (contratos.length === 0) {
+            contenedor.innerHTML = '<p class="text-xs text-gray-400 p-2">Sin resultados</p>';
+        } else {
+            contenedor.innerHTML = contratos.map(c => `
+                <button onmousedown="seleccionarContratoParaCarta(${c.id})"
+                        class="w-full text-left p-2 hover:bg-indigo-50 rounded border-b last:border-0 transition">
+                    <p class="text-sm font-medium text-gray-800">${c.numero || 'Sin número'} <span class="text-xs font-normal text-indigo-600">${c.tipo_contrato || ''}</span></p>
+                    <p class="text-xs text-gray-500">${c.contratado || ''}</p>
+                    <p class="text-xs text-gray-400">${c.item_contratado || ''}</p>
+                </button>
+            `).join('');
+        }
+        contenedor.classList.remove('hidden');
+    } catch (e) { contenedor.classList.add('hidden'); }
+}
+
+async function seleccionarContratoParaCarta(contratoId) {
+    try {
+        const contrato = await fetchAPI(`/contratos/${contratoId}`);
+        _cargarContratoEnCarta(contrato);
+    } catch (e) {
+        mostrarToast('Error al cargar contrato', 'error');
+    }
+}
+
+async function generarCartaIA() {
+    const contrato = state.contratoActual;
+    if (!contrato) { mostrarToast('Primero selecciona un contrato', 'error'); return; }
+
+    const asunto = document.getElementById('carta-asunto').value.trim();
+    if (!asunto) { mostrarToast('Ingresa el asunto de la carta', 'error'); return; }
+
+    const btn = document.getElementById('btn-generar-carta');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> Generando...';
+
+    try {
+        const payload = {
+            contrato_id: contrato.id,
+            asunto: asunto,
+            referencias: document.getElementById('carta-referencias').value || null,
+            instrucciones: document.getElementById('carta-instrucciones').value || null,
+            plantilla_id: document.getElementById('carta-plantilla-id').value ? parseInt(document.getElementById('carta-plantilla-id').value) : null,
+        };
+
+        const resultado = await fetchAPI('/generar-carta', { method: 'POST', body: JSON.stringify(payload) });
+
+        // Rellenar el editor
+        document.getElementById('carta-edit-fecha').value = resultado.fecha_texto;
+        document.getElementById('carta-edit-numero').value = resultado.numero_carta;
+        document.getElementById('carta-edit-dest-nombre').value = resultado.destinatario_nombre;
+        document.getElementById('carta-edit-dest-cargo').value = resultado.destinatario_cargo;
+        document.getElementById('carta-edit-dest-institucion').value = resultado.destinatario_institucion;
+        document.getElementById('carta-edit-asunto').value = resultado.asunto;
+        document.getElementById('carta-edit-referencias').value = resultado.referencias;
+        document.getElementById('carta-edit-cuerpo').value = resultado.cuerpo;
+        document.getElementById('carta-edit-cierre').value = resultado.cierre;
+
+        // Mostrar descripción del convenio si hay plantilla seleccionada
+        const plantillaId = document.getElementById('carta-plantilla-id').value;
+        let convenioTexto = '';
+        if (plantillaId) {
+            const opt = document.getElementById('carta-plantilla-id').selectedOptions[0];
+            convenioTexto = opt ? opt.text : '';
+        }
+        document.getElementById('carta-prev-convenio').textContent = convenioTexto;
+
+        document.getElementById('carta-vacia').classList.add('hidden');
+        document.getElementById('carta-generada').classList.remove('hidden');
+        document.getElementById('btn-exportar-carta').classList.remove('hidden');
+        mostrarToast('Carta generada correctamente');
+    } catch (e) {
+        mostrarToast('Error al generar carta: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Generar con IA';
+    }
+}
+
+function _buildCartaPayload() {
+    return {
+        numero_carta: document.getElementById('carta-edit-numero').value,
+        fecha_texto: document.getElementById('carta-edit-fecha').value,
+        destinatario_nombre: document.getElementById('carta-edit-dest-nombre').value,
+        destinatario_cargo: document.getElementById('carta-edit-dest-cargo').value,
+        destinatario_institucion: document.getElementById('carta-edit-dest-institucion').value,
+        asunto: document.getElementById('carta-edit-asunto').value,
+        referencias: document.getElementById('carta-edit-referencias').value || null,
+        cuerpo: document.getElementById('carta-edit-cuerpo').value,
+        cierre: document.getElementById('carta-edit-cierre').value,
+        plantilla_id: document.getElementById('carta-plantilla-id').value ? parseInt(document.getElementById('carta-plantilla-id').value) : null,
+        contrato_id: window._cartaContratoId || null,
+    };
+}
+
+async function guardarCarta(numeroOverride = null) {
+    const payload = _buildCartaPayload();
+    if (numeroOverride) payload.numero_carta = numeroOverride;
+
+    try {
+        const token = getToken();
+        const resp = await fetch('/api/guardar-carta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(payload)
+        });
+
+        if (resp.status === 409) {
+            const err = await resp.json();
+            // Extraer número sugerido del mensaje
+            const match = err.detail.match(/Número disponible: (.+)$/);
+            const sugerido = match ? match[1] : null;
+
+            const result = await Swal.fire({
+                title: 'Número ya registrado',
+                html: `<p class="text-sm text-gray-600 mb-2">${err.detail}</p>${sugerido ? `<p class="text-sm font-semibold text-blue-700">¿Usar: <strong>${sugerido}</strong>?</p>` : ''}`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: sugerido ? `Usar ${sugerido}` : 'OK',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#2563eb',
+            });
+            if (result.isConfirmed && sugerido) {
+                document.getElementById('carta-edit-numero').value = sugerido;
+                await guardarCarta(sugerido);
+            }
+            return;
+        }
+
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Error al guardar');
+
+        const data = await resp.json();
+
+        // Marcar botón como guardado
+        const btn = document.getElementById('btn-guardar-carta');
+        btn.textContent = '✓ Guardada';
+        btn.classList.replace('bg-blue-600', 'bg-gray-400');
+        btn.disabled = true;
+
+        mostrarToast(data.mensaje || 'Carta guardada en el sistema');
+    } catch(e) {
+        mostrarToast('Error al guardar: ' + e.message, 'error');
+    }
+}
+
+async function exportarCartaDocx() {
+    const payload = _buildCartaPayload();
+
+    try {
+        const token = getToken();
+        const resp = await fetch('/api/exportar-carta', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!resp.ok) throw new Error((await resp.json()).detail || 'Error al exportar');
+
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = payload.numero_carta.replace(/[^\w\-]/g, '_') + '.docx';
+        a.click();
+        URL.revokeObjectURL(url);
+        mostrarToast('Carta descargada');
+    } catch (e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    }
+}
+
+// ============================================
+// SEGUIMIENTO LIQUIDACIÓN
+// ============================================
+
+const CAMPOS_SIONO = new Set([
+    'acta_revisada','acta_remitida_ugpe',
+    'mod_presentado_ne','mod_revisado_aprobado','mod_remitido_ugpe',
+    'amp_presentado_ne','amp_revisado_aprobado','amp_adenda_firmada','amp_remitido_ugpe',
+    'dossier_presentado_ne','dossier_revisado_aprobado','dossier_remitido_ugpe','dossier_remitido_pago',
+    'liq_presentado_ne','liq_revisado_aprobado','liq_remitido_pago',
+]);
+
+const LABELS_CAMPO = {
+    acta_revisada: 'Acta: Revisada y aprobada',
+    acta_remitida_ugpe: 'Acta: Remitida a UGPE',
+    mod_presentado_ne: 'Mod. Partidas: Presentado al NE',
+    mod_revisado_aprobado: 'Mod. Partidas: Revisado y aprobado',
+    mod_remitido_ugpe: 'Mod. Partidas: Remitido a UGPE',
+    amp_presentado_ne: 'Amp. Plazo: Presentado al NE',
+    amp_revisado_aprobado: 'Amp. Plazo: Revisado y aprobado',
+    amp_adenda_firmada: 'Amp. Plazo: Adenda firmada',
+    amp_remitido_ugpe: 'Amp. Plazo: Remitido a UGPE',
+    dossier_presentado_ne: 'Dossier: Presentado al NE',
+    dossier_revisado_aprobado: 'Dossier: Revisado y aprobado',
+    dossier_remitido_ugpe: 'Dossier: Remitido a UGPE',
+    dossier_remitido_pago: 'Dossier: Remitido para pago',
+    liq_presentado_ne: 'Liquidación: Presentado al NE',
+    liq_revisado_aprobado: 'Liquidación: Revisado y aprobado',
+    liq_remitido_pago: 'Liquidación: Remitido para pago',
+    observaciones: 'Observaciones',
+    fecha_fin_contractual: 'Fecha Final de Ejecución Contractual',
+    avance_fisico: 'Avance Físico (%)',
+};
+
+// Tipo de campo: 'siono' | 'texto' | 'fecha' | 'numero'
+function tipoCampo(campo) {
+    if (CAMPOS_SIONO.has(campo)) return 'siono';
+    if (campo === 'observaciones') return 'texto';
+    if (campo === 'fecha_fin_contractual') return 'fecha';
+    if (campo === 'avance_fisico') return 'numero';
+    return 'siono';
+}
+
+let seguimientoData = [];
+let celdaEditando = null; // { comisariaId, campo, valorActual }
+let valorCeldaSeleccionado = null;
+
+function copiarLinkSeguimiento() {
+    const url = window.location.origin + '/seguimiento';
+    navigator.clipboard.writeText(url).then(() => {
+        mostrarToast('Link copiado: ' + url);
+    }).catch(() => {
+        prompt('Copia este link:', url);
+    });
+}
+
+async function cargarSeguimiento() {
+    const tbody = document.getElementById('tbody-seguimiento');
+    tbody.innerHTML = '<tr><td colspan="24" class="text-center py-6 text-gray-400">Cargando...</td></tr>';
+    const aviso = document.getElementById('seg-aviso-readonly');
+    if (estaAutenticado()) {
+        aviso.classList.add('hidden');
+    } else {
+        aviso.classList.remove('hidden');
+    }
+    try {
+        const res = await fetch('/api/seguimiento');
+        seguimientoData = await res.json();
+        renderizarSeguimiento();
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="24" class="text-center py-6 text-red-500">Error al cargar datos</td></tr>';
+    }
+}
+
+function renderizarSeguimiento() {
+    const tbody = document.getElementById('tbody-seguimiento');
+    const editable = estaAutenticado();
+    if (!seguimientoData.length) {
+        tbody.innerHTML = '<tr><td colspan="24" class="text-center py-6 text-gray-400">Sin datos</td></tr>';
+        return;
+    }
+
+    // Campos SI/NO en el orden exacto de las columnas del header
+    // (acta_fecha_firma y dossier_monto_pagado van por separado)
+    const camposSiNo = [
+        'acta_revisada','acta_remitida_ugpe',
+        'mod_presentado_ne','mod_revisado_aprobado','mod_remitido_ugpe',
+        'amp_presentado_ne','amp_revisado_aprobado','amp_adenda_firmada','amp_remitido_ugpe',
+        'dossier_presentado_ne','dossier_revisado_aprobado','dossier_remitido_ugpe','dossier_remitido_pago',
+        'liq_presentado_ne','liq_revisado_aprobado','liq_remitido_pago',
+    ];
+
+    function celdaSiNo(row, campo, editable) {
+        const val = row[campo] || '';
+        let cls = 'celda-dash';
+        if (val === 'SI') cls = 'celda-si';
+        else if (val === 'NO') cls = 'celda-no';
+        else if (val === 'NA') cls = 'celda-na';
+
+        const detalles = (row.detalles || []).filter(d => d.campo === campo);
+        let title = '';
+        if (detalles.length) {
+            const last = detalles[detalles.length-1];
+            title = `${last.usuario} — ${new Date(last.fecha_actualizacion).toLocaleString('es-PE')}`;
+            if (last.observacion) title += `: ${last.observacion}`;
+        }
+        const base = `border border-gray-200 px-1 py-1 text-center`;
+        if (editable) {
+            return `<td class="${cls} ${base} cursor-pointer" onclick="abrirModalCelda(${row.id},'${campo}','${val}','${row.comisaria.replace(/'/g,'\\\'')}')" title="${title}">${val}</td>`;
+        }
+        return `<td class="${cls} ${base} celda-readonly" title="${title}">${val}</td>`;
+    }
+
+    tbody.innerHTML = seguimientoData.map((row, idx) => {
+        const bg = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        const fechaFin = row.fecha_fin_contractual ? row.fecha_fin_contractual.substring(0,10) : '';
+        const fechaFirma = row.acta_fecha_firma ? row.acta_fecha_firma.substring(0,10) : '';
+        const updatedAt = row.updated_at ? new Date(row.updated_at).toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'}) : '';
+        const avanceProg = row.avance_programado != null ? Math.round(row.avance_programado * 100) + '%' : '';
+        const avanceFis = row.avance_fisico != null ? (row.avance_fisico * 100).toFixed(1) + '%' : '';
+        const monto = row.dossier_monto_pagado != null ? 'S/ ' + row.dossier_monto_pagado.toLocaleString('es-PE',{minimumFractionDigits:2}) : '';
+
+        // Construir celdas SI/NO en orden, insertando monto_pagado después de dossier_remitido_pago
+        let celdasHtml = '';
+        for (const campo of camposSiNo) {
+            celdasHtml += celdaSiNo(row, campo, editable);
+            if (campo === 'dossier_remitido_pago') {
+                celdasHtml += `<td class="border border-gray-200 px-1 py-1 text-right">${monto}</td>`;
+            }
+        }
+
+        const tdEdit = (campo, display, extraCls = '') => {
+            const val = row[campo] ?? '';
+            const esc = String(val).replace(/'/g, "\\'");
+            if (editable) {
+                return `<td class="border border-gray-200 px-1 py-1 cursor-pointer hover:bg-yellow-50 group relative ${extraCls}"
+                            onclick="abrirModalCelda(${row.id},'${campo}','${esc}','${row.comisaria.replace(/'/g,"\\'")}')">
+                            ${display}<span class="absolute top-0.5 right-0.5 text-gray-300 group-hover:text-blue-400 text-[9px] leading-none">✎</span>
+                        </td>`;
+            }
+            return `<td class="border border-gray-200 px-1 py-1 ${extraCls}">${display}</td>`;
+        };
+
+        return `<tr class="${bg} text-xs">
+            <td class="border border-gray-200 px-1 py-1 text-center font-medium">${row.numero}</td>
+            <td class="border border-gray-200 px-2 py-1 font-medium">${row.comisaria}</td>
+            <td class="border border-gray-200 px-1 py-1 text-center">${avanceProg}</td>
+            ${tdEdit('avance_fisico', avanceFis, 'text-center')}
+            ${tdEdit('fecha_fin_contractual', fechaFin, 'text-center')}
+            <td class="border border-gray-200 px-1 py-1 text-center">${fechaFirma}</td>
+            ${celdasHtml}
+            ${tdEdit('observaciones', row.observaciones || '', 'text-left text-gray-600')}
+            <td class="border border-gray-200 px-1 py-1 text-center text-gray-400 text-[10px]">${updatedAt}</td>
+        </tr>`;
+    }).join('');
+}
+
+function abrirModalCelda(comisariaId, campo, valorActual, nombreComisaria) {
+    const tipo = tipoCampo(campo);
+    celdaEditando = { comisariaId, campo, valorActual, tipo };
+    valorCeldaSeleccionado = tipo === 'siono' ? (valorActual || null) : valorActual;
+
+    document.getElementById('modal-celda-titulo').textContent = LABELS_CAMPO[campo] || campo;
+    document.getElementById('modal-celda-subtitulo').textContent = nombreComisaria;
+    document.getElementById('modal-celda-obs').value = '';
+    document.getElementById('modal-celda-enlace').value = '';
+    document.getElementById('modal-celda-archivo').value = '';
+    document.getElementById('modal-celda-detalle-extra').classList.add('hidden');
+
+    const sinoSection = document.getElementById('modal-siono-section');
+    const inputSection = document.getElementById('modal-input-section');
+    const inputEl = document.getElementById('modal-celda-input');
+    const inputLabel = document.getElementById('modal-input-label');
+
+    if (tipo === 'siono') {
+        sinoSection.classList.remove('hidden');
+        inputSection.classList.add('hidden');
+        resaltarBotonValor(valorActual);
+    } else {
+        sinoSection.classList.add('hidden');
+        inputSection.classList.remove('hidden');
+        if (tipo === 'fecha') {
+            inputEl.type = 'date';
+            inputLabel.textContent = 'Fecha';
+            inputEl.value = valorActual ? valorActual.substring(0, 10) : '';
+        } else if (tipo === 'numero') {
+            inputEl.type = 'number';
+            inputEl.min = '0'; inputEl.max = '100'; inputEl.step = '0.1';
+            inputLabel.textContent = 'Avance físico (%)';
+            inputEl.value = valorActual !== '' && valorActual != null
+                ? (parseFloat(valorActual) * 100).toFixed(1) : '';
+        } else {
+            inputEl.type = 'text';
+            inputLabel.textContent = 'Observaciones';
+            inputEl.value = valorActual || '';
+        }
+        setTimeout(() => inputEl.focus(), 100);
+    }
+
+    document.getElementById('modal-celda-detalle').classList.remove('hidden');
+}
+
+function cerrarModalCelda() {
+    document.getElementById('modal-celda-detalle').classList.add('hidden');
+    celdaEditando = null;
+    valorCeldaSeleccionado = null;
+}
+
+function seleccionarValorCelda(val) {
+    valorCeldaSeleccionado = val;
+    resaltarBotonValor(val);
+    const extraVisible = val === 'SI' && CAMPOS_SIONO.has(celdaEditando?.campo);
+    document.getElementById('modal-celda-detalle-extra').classList.toggle('hidden', !extraVisible);
+}
+
+function resaltarBotonValor(val) {
+    ['SI','NO','NA','-'].forEach(v => {
+        const idMap = { 'SI': 'btn-celda-si', 'NO': 'btn-celda-no', 'NA': 'btn-celda-na', '-': 'btn-celda-dash' };
+        const btn = document.getElementById(idMap[v]);
+        if (!btn) return;
+        btn.classList.toggle('ring-2', v === val);
+        btn.classList.toggle('ring-offset-1', v === val);
+        btn.classList.toggle('ring-blue-500', v === val);
+    });
+}
+
+async function guardarCelda() {
+    const btn = document.getElementById('btn-guardar-celda');
+    const { comisariaId, campo, tipo } = celdaEditando;
+
+    // Determinar valor a enviar
+    let valor;
+    if (tipo === 'siono') {
+        if (!valorCeldaSeleccionado) { mostrarToast('Selecciona un valor', 'error'); return; }
+        valor = valorCeldaSeleccionado;
+    } else if (tipo === 'fecha') {
+        valor = document.getElementById('modal-celda-input').value || null;
+    } else if (tipo === 'numero') {
+        const pct = document.getElementById('modal-celda-input').value;
+        valor = pct !== '' ? String(parseFloat(pct) / 100) : null;
+    } else {
+        valor = document.getElementById('modal-celda-input').value.trim() || null;
+    }
+
+    btn.disabled = true;
+    try {
+        const observacion = document.getElementById('modal-celda-obs').value.trim() || null;
+        const enlace = document.getElementById('modal-celda-enlace').value.trim() || null;
+        const archivo = document.getElementById('modal-celda-archivo').files[0] || null;
+
+        const res = await fetch(`/api/seguimiento/${comisariaId}/celda`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+            body: JSON.stringify({ campo, valor, observacion, enlace })
+        });
+        if (!res.ok) throw new Error(await res.text());
+
+        if (archivo && valor === 'SI') {
+            const fd = new FormData();
+            fd.append('archivo', archivo);
+            if (observacion) fd.append('observacion', observacion);
+            if (enlace) fd.append('enlace', enlace);
+            await fetch(`/api/seguimiento/${comisariaId}/celda/${campo}/archivo`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + getToken() },
+                body: fd
+            });
+        }
+
+        mostrarToast('Actualizado correctamente');
+        cerrarModalCelda();
+        await cargarSeguimiento();
+    } catch (e) {
+        mostrarToast('Error: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
     }
 }
 

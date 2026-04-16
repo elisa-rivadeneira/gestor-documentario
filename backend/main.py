@@ -4,26 +4,36 @@ FastAPI + SQLite + Claude IA
 """
 import os
 import re
+import json
 import shutil
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 from datetime import datetime
 from typing import Optional, List
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 import pdfplumber
+import io
+import openpyxl
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 from database import engine, get_db, Base
-from models import Documento, Adjunto, Usuario, Contrato, AdjuntoContrato, ComisariaContrato, ExpedienteContrato
+from models import Documento, Adjunto, Usuario, Contrato, AdjuntoContrato, ComisariaContrato, ExpedienteContrato, PlantillaCarta, CartaGenerada, ConfiguracionSistema, SeguimientoComisaria, SeguimientoCeldaDetalle
 from schemas import (
     DocumentoCreate, DocumentoUpdate, DocumentoResponse, DocumentoListResponse,
     AdjuntoCreate, AdjuntoResponse, AnalisisIARequest, AnalisisIAResponse,
     LoginRequest, LoginResponse, UsuarioResponse,
     ContratoCreate, ContratoUpdate, ContratoResponse, ContratoListResponse,
     AdjuntoContratoResponse,
-    ExpedienteContratoCreate, ExpedienteContratoUpdate, ExpedienteContratoResponse
+    ExpedienteContratoCreate, ExpedienteContratoUpdate, ExpedienteContratoResponse,
+    PlantillaCartaCreate, PlantillaCartaResponse,
+    GenerarCartaRequest, GenerarCartaResponse, ExportarCartaRequest,
+    SeguimientoComisariaResponse, ActualizarCeldaRequest
 )
 from services.ia_service import ia_service, extraer_numero_con_ocr, OCR_DISPONIBLE
 from services.auth_service import hash_password, verify_password, create_token, verify_token
@@ -84,6 +94,33 @@ def migrar_contratos():
                 conn.commit()
                 print("Migración completada: columna estado_ejecucion agregada (PENDIENTE por defecto)")
 
+            # Agregar columna tipo_contratado (empresa | consorcio)
+            if 'tipo_contratado' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN tipo_contratado VARCHAR(20) DEFAULT 'empresa'"))
+                conn.commit()
+                print("Migración completada: columna tipo_contratado agregada")
+
+            # Agregar columnas de representante para cartas
+            if 'nombre_representante' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN nombre_representante VARCHAR(255)"))
+                conn.commit()
+                print("Migración completada: columna nombre_representante agregada")
+
+            if 'cargo_representante' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN cargo_representante VARCHAR(255)"))
+                conn.commit()
+                print("Migración completada: columna cargo_representante agregada")
+
+            if 'email_representante' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN email_representante VARCHAR(255)"))
+                conn.commit()
+                print("Migración completada: columna email_representante agregada")
+
+            if 'whatsapp_representante' not in columnas:
+                conn.execute(text("ALTER TABLE contratos ADD COLUMN whatsapp_representante VARCHAR(20)"))
+                conn.commit()
+                print("Migración completada: columna whatsapp_representante agregada")
+
             # Establecer 'mantenimiento' como valor por defecto para contratos existentes sin tipo
             result = conn.execute(text("UPDATE contratos SET tipo_contrato = 'mantenimiento' WHERE tipo_contrato IS NULL"))
             if result.rowcount > 0:
@@ -112,8 +149,97 @@ def migrar_contratos():
 
 migrar_contratos()
 
+def migrar_documentos():
+    """
+    Agrega columnas nuevas a documentos si no existen.
+    - estado: 'enviado' por defecto — todos los registros existentes quedan como enviados.
+    """
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(documentos)"))
+            columnas = [row[1] for row in result.fetchall()]
+
+            if 'estado' not in columnas:
+                conn.execute(text("ALTER TABLE documentos ADD COLUMN estado VARCHAR(20) DEFAULT 'enviado'"))
+                conn.commit()
+                print("Migración completada: columna 'estado' agregada a documentos (default: 'enviado')")
+
+            if 'archivo_docx' not in columnas:
+                conn.execute(text("ALTER TABLE documentos ADD COLUMN archivo_docx VARCHAR(500)"))
+                conn.commit()
+                print("Migración completada: columna 'archivo_docx' agregada a documentos")
+
+            # Asegurar que todos los registros existentes sin estado queden como 'enviado'
+            result = conn.execute(text("UPDATE documentos SET estado='enviado' WHERE estado IS NULL"))
+            if result.rowcount > 0:
+                conn.commit()
+                print(f"Migración completada: {result.rowcount} documentos existentes marcados como 'enviado'")
+    except Exception as e:
+        print(f"Error en migración documentos: {e}")
+
+migrar_documentos()
+
 # Crear usuarios iniciales si no existen
 crear_usuarios_iniciales()
+
+def seed_seguimiento():
+    """Pobla la tabla seguimiento_comisaria con los datos del Excel si está vacía."""
+    from sqlalchemy.orm import Session as OrmSession
+    from database import SessionLocal
+    db: OrmSession = SessionLocal()
+    try:
+        if db.query(SeguimientoComisaria).count() > 0:
+            return
+        datos = [
+            (1,'SAN CAYETANO',1,1,'2026-02-17','2026-02-10','SI','SI','NO','NO','NO','SI','SI','SI','NO','SI','SI','SI','SI',699999.69,'NO','NO',None,None),
+            (2,'SAN COSME',1,1,None,'2026-02-18','SI','SI','NO','NO','NO','SI','SI','SI','NO','SI','SI',None,'SI',None,'NO','NO',None,None),
+            (3,'COLLIQUE',1,1,None,'2026-03-14','SI','SI','SI','SI','SI','SI','SI','SI','NO','SI','NO','NO','NO',None,'SI','SI',None,None),
+            (4,'TAHUANTINSUYO',1,1,None,'2026-03-28','SI','SI','NO','NO','NO','SI','SI','SI','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (5,'CHANCAY',1,1,None,'2026-03-28','SI','SI','SI','SI','SI','SI','SI','SI','NO','SI','NO','NO','NO',None,'SI','SI',None,None),
+            (6,'JICAMARCA',1,0.8357,None,None,'NO','NO','NO','NO','NO','SI','SI','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (7,'PRO',1,1,'2026-03-25',None,'NO','NO','NO','NO','NO','SI','SI','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (8,'SAN MARTÍN DE PORRES',1,None,None,None,'NO','NO','NO','NO','NO','SI','SI','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (9,'CARABAYLLO',1,1,'2026-03-29','2026-03-24','SI','SI','-','-','-','SI','SI','SI','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (10,'LA ENSENADA',1,1,None,'2026-03-29','SI','SI','-','-','-','SI','SI','SI','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (11,'MARISCAL CÁCERES',1,1,'2026-04-05','2025-04-05','SI','SI','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (12,'SAN ANTONIO DE JICAMARCA',1,1,None,'2025-04-05','SI','SI','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (13,'SANTA CLARA',1,1,'2026-04-03','2026-04-03','SI','SI','NO','NO','NO','-','-','-','-','SI','NO','NO','NO',None,'NO','NO',None,None),
+            (14,'SANTA ANITA',1,1,None,None,'SI','SI','NO','NO','NO','-','-','-','-','SI','NO','NO','NO',None,'NO','NO',None,'NO QUIERE FIRMAR COMISARIO'),
+            (15,'ALFONSO UGARTE',1,None,None,None,'NO','NO','NO','NO','NO','SI','SI','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (16,'SAN GENARO',1,1,'2026-03-29',None,'SI','SI','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (17,'JOSÉ GÁLVEZ',1,1,None,None,'SI','SI','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (18,'VILLA EL SALVADOR',1,0.98,None,None,'NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (19,'PAMPLONA ALTA II',1,1,None,None,'NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO','NO',None,'NO','NO',None,None),
+            (20,'CIUDAD Y CAMPO',1,None,None,None,'NO','NO','NO','NO','NO','NO','NO','NO','NO','SI','NO','NO','NO',None,'NO','NO',None,None),
+        ]
+        for d in datos:
+            def parse_date(val):
+                if val and isinstance(val, str):
+                    from datetime import datetime as dt
+                    return dt.strptime(val, '%Y-%m-%d')
+                return None
+            row = SeguimientoComisaria(
+                numero=d[0], comisaria=d[1], avance_programado=d[2], avance_fisico=d[3],
+                fecha_fin_contractual=parse_date(d[4]), acta_fecha_firma=parse_date(d[5]),
+                acta_revisada=d[6], acta_remitida_ugpe=d[7],
+                mod_presentado_ne=d[8], mod_revisado_aprobado=d[9], mod_remitido_ugpe=d[10],
+                amp_presentado_ne=d[11], amp_revisado_aprobado=d[12], amp_adenda_firmada=d[13], amp_remitido_ugpe=d[14],
+                dossier_presentado_ne=d[15], dossier_revisado_aprobado=d[16], dossier_remitido_ugpe=d[17],
+                dossier_remitido_pago=d[18], dossier_monto_pagado=d[19],
+                liq_presentado_ne=d[20], liq_revisado_aprobado=d[21], liq_remitido_pago=d[22],
+                observaciones=d[23]
+            )
+            db.add(row)
+        db.commit()
+        print("Seed seguimiento completado: 20 comisarías cargadas.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error en seed_seguimiento: {e}")
+    finally:
+        db.close()
+
+seed_seguimiento()
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -1046,6 +1172,105 @@ def health_check():
 
 
 # ============================================
+# ENDPOINT EXTRAER REFERENCIA DESDE PDF
+# ============================================
+
+@app.post("/api/extraer-referencia-pdf")
+async def extraer_referencia_pdf(
+    archivo: UploadFile = File(None),
+    documento_id: int = Query(None),
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """
+    Extrae información de referencia (tipo, número, fecha, asunto) desde la
+    primera página de un PDF, usando IA.
+    Acepta un archivo subido O un documento_id existente en el gestor.
+    """
+    from openai import OpenAI
+    import tempfile
+
+    ruta_temp = None
+    ruta_pdf = None
+
+    try:
+        # Obtener ruta al PDF
+        if archivo:
+            suffix = os.path.splitext(archivo.filename or ".pdf")[1] or ".pdf"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=UPLOAD_DIR)
+            contenido = await archivo.read()
+            tmp.write(contenido)
+            tmp.close()
+            ruta_temp = tmp.name
+            ruta_pdf = ruta_temp
+        elif documento_id:
+            doc = db.query(Documento).filter(Documento.id == documento_id).first()
+            if not doc:
+                raise HTTPException(status_code=404, detail="Documento no encontrado")
+            if not doc.archivo_local:
+                raise HTTPException(status_code=400, detail="El documento no tiene archivo asociado")
+            ruta_pdf = os.path.join(UPLOAD_DIR, doc.archivo_local)
+            if not os.path.exists(ruta_pdf):
+                raise HTTPException(status_code=404, detail="Archivo PDF no encontrado en disco")
+        else:
+            raise HTTPException(status_code=400, detail="Se requiere 'archivo' o 'documento_id'")
+
+        # Extraer solo primera página
+        texto_primera_pagina = ""
+        try:
+            with pdfplumber.open(ruta_pdf) as pdf:
+                if pdf.pages:
+                    texto_primera_pagina = pdf.pages[0].extract_text() or ""
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"No se pudo leer el PDF: {e}")
+
+        if not texto_primera_pagina.strip():
+            return {"exito": False, "mensaje": "No se pudo extraer texto del PDF (puede ser imagen escaneada)"}
+
+        # Llamar a IA para extraer campos
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=503, detail="API de IA no configurada")
+
+        client = OpenAI(api_key=api_key)
+        prompt = f"""Analiza el siguiente texto de la primera página de un documento y extrae:
+- tipo_doc: el tipo de documento (Carta, Oficio, Convenio, Informe, Acta, Resolución, Contrato u Otro)
+- numero: el número o código del documento (solo el número, sin "N°" ni palabras extra)
+- fecha: la fecha del documento en formato YYYY-MM-DD (si no hay fecha clara, dejar vacío)
+- asunto: el asunto o tema principal del documento en una línea corta (máximo 100 caracteres)
+
+Responde ÚNICAMENTE con JSON sin markdown:
+{{"tipo_doc": "...", "numero": "...", "fecha": "...", "asunto": "..."}}
+
+TEXTO DEL DOCUMENTO:
+{texto_primera_pagina[:2000]}"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=200,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = re.sub(r'^```[a-z]*\n?', '', raw)
+            raw = re.sub(r'\n?```$', '', raw)
+        datos = json.loads(raw)
+
+        return {
+            "exito": True,
+            "tipo_doc": datos.get("tipo_doc", "Documento"),
+            "numero": datos.get("numero", ""),
+            "fecha": datos.get("fecha", ""),
+            "asunto": datos.get("asunto", ""),
+        }
+
+    finally:
+        if ruta_temp and os.path.exists(ruta_temp):
+            os.remove(ruta_temp)
+
+
+# ============================================
 # ENDPOINT DE CONSULTA RUC (SUNAT)
 # ============================================
 
@@ -1217,6 +1442,1101 @@ def eliminar_expediente(
 
 
 # ============================================
+# PLANTILLAS DE CARTA
+# ============================================
+
+@app.get("/api/plantillas-carta", response_model=List[PlantillaCartaResponse])
+def listar_plantillas(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Lista todas las plantillas de carta."""
+    return db.query(PlantillaCarta).order_by(PlantillaCarta.created_at.desc()).all()
+
+
+@app.post("/api/plantillas-carta", response_model=PlantillaCartaResponse)
+def crear_plantilla(
+    nombre: str = Query(...),
+    descripcion: Optional[str] = Query(None),
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Crea una nueva plantilla de carta subiendo un archivo .docx de referencia."""
+    # Guardar el archivo
+    ext = os.path.splitext(archivo.filename)[1].lower()
+    if ext not in ['.docx', '.doc']:
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .docx o .doc")
+
+    carpeta = os.path.join(UPLOAD_DIR, "plantillas")
+    os.makedirs(carpeta, exist_ok=True)
+    nombre_archivo = f"plantilla_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+    ruta = os.path.join(carpeta, nombre_archivo)
+
+    with open(ruta, "wb") as f:
+        f.write(archivo.file.read())
+
+    plantilla = PlantillaCarta(
+        nombre=nombre,
+        descripcion=descripcion,
+        archivo_local=f"plantillas/{nombre_archivo}",
+    )
+    db.add(plantilla)
+    db.commit()
+    db.refresh(plantilla)
+    return plantilla
+
+
+@app.delete("/api/plantillas-carta/{plantilla_id}", status_code=204)
+def eliminar_plantilla(
+    plantilla_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Elimina una plantilla de carta."""
+    plantilla = db.query(PlantillaCarta).filter(PlantillaCarta.id == plantilla_id).first()
+    if not plantilla:
+        raise HTTPException(status_code=404, detail="Plantilla no encontrada")
+    if plantilla.archivo_local:
+        ruta = os.path.join(UPLOAD_DIR, plantilla.archivo_local)
+        if os.path.exists(ruta):
+            os.remove(ruta)
+    db.delete(plantilla)
+    db.commit()
+    return None
+
+
+# ============================================
+# MEMBRETE
+# ============================================
+
+@app.get("/api/membrete")
+def get_membrete(db: Session = Depends(get_db)):
+    """Retorna la ruta del membrete actual si existe."""
+    cfg = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "membrete_archivo").first()
+    if cfg and cfg.valor:
+        return {"archivo": cfg.valor, "url": f"/uploads/{cfg.valor}"}
+    return {"archivo": None, "url": None}
+
+
+@app.post("/api/membrete")
+async def subir_membrete(
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Sube o reemplaza el membrete (.docx). Solo puede haber uno."""
+    if not archivo.filename.lower().endswith('.docx'):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .docx")
+
+    # Eliminar membrete anterior si existe
+    cfg = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "membrete_archivo").first()
+    if cfg and cfg.valor:
+        ruta_anterior = os.path.join(UPLOAD_DIR, cfg.valor)
+        if os.path.exists(ruta_anterior):
+            os.remove(ruta_anterior)
+
+    nombre_archivo = f"membrete_{datetime.now().strftime('%Y%m%d%H%M%S')}.docx"
+    ruta = os.path.join(UPLOAD_DIR, nombre_archivo)
+    contenido = await archivo.read()
+    with open(ruta, "wb") as f:
+        f.write(contenido)
+
+    if cfg:
+        cfg.valor = nombre_archivo
+    else:
+        cfg = ConfiguracionSistema(clave="membrete_archivo", valor=nombre_archivo)
+        db.add(cfg)
+    db.commit()
+    return {"archivo": nombre_archivo, "url": f"/uploads/{nombre_archivo}"}
+
+
+@app.delete("/api/membrete", status_code=204)
+def eliminar_membrete(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Elimina el membrete actual."""
+    cfg = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "membrete_archivo").first()
+    if cfg and cfg.valor:
+        ruta = os.path.join(UPLOAD_DIR, cfg.valor)
+        if os.path.exists(ruta):
+            os.remove(ruta)
+        cfg.valor = None
+        db.commit()
+    return None
+
+
+@app.get("/api/configuracion/firma")
+def get_configuracion_firma(db: Session = Depends(get_db)):
+    def get_cfg(clave, default=""):
+        row = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == clave).first()
+        return row.valor if row and row.valor else default
+    archivo = get_cfg("firma_imagen")
+    return {
+        "nombre": get_cfg("firma_nombre"),
+        "cargo": get_cfg("firma_cargo"),
+        "imagen_archivo": archivo,
+        "imagen_url": f"/uploads/{archivo}" if archivo else None,
+    }
+
+
+@app.post("/api/configuracion/firma")
+def guardar_configuracion_firma(
+    data: dict,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    def set_cfg(clave, valor):
+        row = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == clave).first()
+        if row:
+            row.valor = str(valor)
+        else:
+            db.add(ConfiguracionSistema(clave=clave, valor=str(valor)))
+
+    set_cfg("firma_nombre", data.get("nombre", ""))
+    set_cfg("firma_cargo", data.get("cargo", ""))
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/configuracion/firma/imagen")
+async def subir_firma_imagen(
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    if not archivo.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+        raise HTTPException(status_code=400, detail="Solo se aceptan PNG o JPG")
+
+    cfg = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "firma_imagen").first()
+    if cfg and cfg.valor:
+        ruta_anterior = os.path.join(UPLOAD_DIR, cfg.valor)
+        if os.path.exists(ruta_anterior):
+            os.remove(ruta_anterior)
+
+    ext = os.path.splitext(archivo.filename)[1].lower()
+    nombre_archivo = f"firma_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext}"
+    ruta = os.path.join(UPLOAD_DIR, nombre_archivo)
+    contenido = await archivo.read()
+    with open(ruta, "wb") as f:
+        f.write(contenido)
+
+    if cfg:
+        cfg.valor = nombre_archivo
+    else:
+        db.add(ConfiguracionSistema(clave="firma_imagen", valor=nombre_archivo))
+    db.commit()
+    return {"archivo": nombre_archivo, "url": f"/uploads/{nombre_archivo}"}
+
+
+@app.delete("/api/configuracion/firma/imagen", status_code=204)
+def eliminar_firma_imagen(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    cfg = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == "firma_imagen").first()
+    if cfg and cfg.valor:
+        ruta = os.path.join(UPLOAD_DIR, cfg.valor)
+        if os.path.exists(ruta):
+            os.remove(ruta)
+        cfg.valor = None
+        db.commit()
+    return None
+
+
+@app.get("/api/configuracion/numeracion")
+def get_configuracion_numeracion(db: Session = Depends(get_db)):
+    """Retorna la configuración de numeración de cartas."""
+    def get_cfg(clave, default):
+        row = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == clave).first()
+        return row.valor if row and row.valor else default
+
+    return {
+        "sufijo": get_cfg("carta_sufijo", ""),
+        "digitos": int(get_cfg("carta_digitos", "6")),
+    }
+
+
+@app.post("/api/configuracion/numeracion")
+def guardar_configuracion_numeracion(
+    data: dict,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """Guarda la configuración de numeración de cartas."""
+    def set_cfg(clave, valor):
+        row = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == clave).first()
+        if row:
+            row.valor = str(valor)
+        else:
+            db.add(ConfiguracionSistema(clave=clave, valor=str(valor)))
+
+    set_cfg("carta_sufijo", data.get("sufijo", ""))
+    set_cfg("carta_digitos", str(data.get("digitos", 6)))
+    db.commit()
+    return {"ok": True}
+
+
+# ============================================
+# GENERADOR DE CARTAS CON IA
+# ============================================
+
+def _obtener_siguiente_numero_carta(db: Session) -> tuple:
+    """
+    Obtiene el siguiente número correlativo para una carta.
+    Lee configuración de sufijo y dígitos desde configuracion_sistema.
+    Retorna (numero_correlativo: int, numero_completo: str).
+    """
+    anio = datetime.now().year
+
+    # Leer configuración
+    def get_cfg(clave, default):
+        row = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == clave).first()
+        return row.valor if row and row.valor else default
+
+    sufijo = get_cfg("carta_sufijo", "").strip()
+    digitos = int(get_cfg("carta_digitos", "6"))
+
+    ultima = (
+        db.query(CartaGenerada)
+        .filter(CartaGenerada.anio == anio)
+        .order_by(CartaGenerada.numero_correlativo.desc())
+        .first()
+    )
+    siguiente = (ultima.numero_correlativo + 1) if ultima else 1
+    correlativo_str = str(siguiente).zfill(digitos)
+
+    if sufijo:
+        numero_completo = f"Carta N° {correlativo_str}-{anio}-{sufijo}"
+    else:
+        numero_completo = f"Carta N° {correlativo_str}-{anio}"
+
+    return siguiente, numero_completo
+
+
+def _leer_plantilla_docx(ruta: str) -> str:
+    """Extrae texto de un .docx para usarlo como referencia de estructura."""
+    try:
+        import zipfile
+        import xml.etree.ElementTree as ET
+        with zipfile.ZipFile(ruta) as z:
+            with z.open('word/document.xml') as f:
+                tree = ET.parse(f)
+                root = tree.getroot()
+                texts = []
+                for para in root.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'):
+                    runs = para.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t')
+                    line = ''.join(r.text or '' for r in runs)
+                    if line.strip():
+                        texts.append(line)
+        return '\n'.join(texts[:60])  # Primeras 60 líneas como referencia
+    except Exception as e:
+        print(f"Error leyendo plantilla: {e}")
+        return ""
+
+
+@app.post("/api/generar-carta", response_model=GenerarCartaResponse)
+def generar_carta_ia(
+    request: GenerarCartaRequest,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """
+    Genera una propuesta de carta usando IA.
+    Toma datos del contrato como destinatario y produce el cuerpo de la carta.
+    """
+    from openai import OpenAI
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    print(f"DEBUG OPENAI_API_KEY: {'SET (' + api_key[:10] + '...)' if api_key else 'NOT SET'}", flush=True)
+    if not api_key:
+        raise HTTPException(status_code=503, detail="API de IA no configurada (OPENAI_API_KEY)")
+
+    # Obtener datos del contrato
+    contrato = db.query(Contrato).filter(Contrato.id == request.contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+
+    # Número de carta correlativo
+    correlativo, numero_carta = _obtener_siguiente_numero_carta(db)
+
+    # Fecha en formato peruano
+    meses = ["enero","febrero","marzo","abril","mayo","junio",
+             "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    hoy = datetime.now()
+    fecha_texto = f"Lima, {hoy.day} de {meses[hoy.month-1]} de {hoy.year}"
+
+    # Destinatario desde el contrato
+    destinatario_nombre = contrato.nombre_representante or contrato.contratado or ""
+    destinatario_cargo = contrato.cargo_representante or ""
+    destinatario_institucion = contrato.contratado or ""
+
+    # Referencia a plantilla si hay
+    texto_plantilla = ""
+    if request.plantilla_id:
+        plantilla = db.query(PlantillaCarta).filter(PlantillaCarta.id == request.plantilla_id).first()
+        if plantilla and plantilla.archivo_local:
+            ruta = os.path.join(UPLOAD_DIR, plantilla.archivo_local)
+            if os.path.exists(ruta):
+                texto_plantilla = _leer_plantilla_docx(ruta)
+
+    # Contexto del contrato para la IA
+    contexto_contrato = f"""
+Contrato N° {contrato.numero or 'S/N'}
+Tipo: {contrato.tipo_contrato or ''}
+Contratado: {contrato.contratado or ''}
+Item: {contrato.item_contratado or ''}
+Estado: {contrato.estado_ejecucion or ''}
+"""
+
+    prompt_sistema = """Eres un asistente experto en redacción de cartas institucionales formales peruanas.
+Redactas cartas en nombre del NÚCLEO EJECUTOR PARA EL MANTENIMIENTO, ACONDICIONAMIENTO Y EQUIPAMIENTO DE COMISARÍAS - NEMAEC.
+El firmante siempre es MIGUEL IVAN ALARCÓN PARCO, PRESIDENTE NEMAEC.
+Responde ÚNICAMENTE con un JSON con esta estructura exacta (sin markdown, sin explicaciones):
+{
+  "referencias": "a) ...\nb) ...",
+  "cuerpo": "Tengo el agrado de dirigirme a usted...",
+  "cierre": "Sin otro particular, hago propicia la oportunidad para expresarle los sentimientos de mi especial consideración y estima."
+}"""
+
+    prompt_usuario = f"""Redacta una carta institucional formal con la siguiente información:
+
+DATOS DEL CONTRATO:
+{contexto_contrato}
+
+ASUNTO: {request.asunto}
+
+REFERENCIAS INDICADAS: {request.referencias or '(ninguna)'}
+
+INSTRUCCIONES ADICIONALES: {request.instrucciones or '(ninguna)'}
+
+{f'EJEMPLO DE ESTRUCTURA (carta de referencia):{chr(10)}{texto_plantilla[:1500]}' if texto_plantilla else ''}
+
+Genera:
+1. "referencias": las referencias formales del contrato en formato "a) ...\nb) ..."
+2. "cuerpo": el cuerpo completo de la carta (desde "Tengo el agrado..." hasta antes del cierre), formal, conciso y con el tono institucional peruano correcto
+3. "cierre": la frase de cierre (usar la estándar si no se indica otra)"""
+
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user", "content": prompt_usuario}
+            ],
+            temperature=0.3,
+            max_tokens=1500,
+        )
+        contenido = response.choices[0].message.content.strip()
+        # Limpiar posibles bloques markdown
+        if contenido.startswith("```"):
+            contenido = re.sub(r'^```[a-z]*\n?', '', contenido)
+            contenido = re.sub(r'\n?```$', '', contenido)
+        datos = json.loads(contenido)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando carta con IA: {str(e)}")
+
+    return GenerarCartaResponse(
+        numero_carta=numero_carta,
+        fecha_texto=fecha_texto,
+        destinatario_nombre=destinatario_nombre.upper(),
+        destinatario_cargo=destinatario_cargo,
+        destinatario_institucion=destinatario_institucion.upper(),
+        asunto=request.asunto.upper(),
+        referencias=datos.get("referencias", ""),
+        cuerpo=datos.get("cuerpo", ""),
+        cierre=datos.get("cierre", "Sin otro particular, hago propicia la oportunidad para expresarle los sentimientos de mi especial consideración y estima."),
+    )
+
+
+def _construir_docx_buffer(request: ExportarCartaRequest, db: Session):
+    """
+    Genera el .docx de una carta y lo retorna como BytesIO.
+    Función interna reutilizable por guardar_carta y exportar_carta_docx.
+    """
+    import io
+    try:
+        from docx import Document
+        from docx.shared import Pt, Cm, RGBColor, Cm as DocxCm
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn, qn as _qn
+        from docx.oxml import OxmlElement as _OxmlElement
+    except ImportError:
+        raise HTTPException(status_code=503, detail="python-docx no instalado.")
+
+    def get_cfg(clave, default=""):
+        row = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == clave).first()
+        return row.valor if row and row.valor else default
+
+    # ── Abrir membrete como base (si existe), si no documento en blanco ──
+    cfg_membrete = db.query(ConfiguracionSistema).filter(
+        ConfiguracionSistema.clave == "membrete_archivo"
+    ).first()
+    ruta_membrete = None
+    if cfg_membrete and cfg_membrete.valor:
+        ruta_membrete = os.path.join(UPLOAD_DIR, cfg_membrete.valor)
+        if not os.path.exists(ruta_membrete):
+            ruta_membrete = None
+
+    if ruta_membrete:
+        doc = Document(ruta_membrete)
+        body = doc.element.body
+        sect_pr = body.find(qn('w:sectPr'))
+        for child in list(body):
+            if child != sect_pr:
+                body.remove(child)
+    else:
+        doc = Document()
+        section = doc.sections[0]
+        section.top_margin = Cm(2.5)
+        section.bottom_margin = Cm(2.5)
+        section.left_margin = Cm(3)
+        section.right_margin = Cm(2.5)
+
+    estilo = doc.styles['Normal']
+    estilo.font.name = 'Arial'
+    estilo.font.size = Pt(11)
+
+    def agregar_parrafo(texto, bold=False, italic=False, size=11, align=WD_ALIGN_PARAGRAPH.LEFT,
+                        space_before=0, space_after=6, color=None):
+        p = doc.add_paragraph()
+        p.alignment = align
+        p.paragraph_format.space_before = Pt(space_before)
+        p.paragraph_format.space_after = Pt(space_after)
+        run = p.add_run(texto)
+        run.bold = bold
+        run.italic = italic
+        run.font.size = Pt(size)
+        run.font.name = 'Arial'
+        if color:
+            run.font.color.rgb = RGBColor(*color)
+        return p
+
+    agregar_parrafo(request.fecha_texto, align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=8)
+    agregar_parrafo(request.numero_carta, bold=True, space_after=12)
+    agregar_parrafo("Señor:", space_after=0)
+    agregar_parrafo(request.destinatario_nombre, bold=True, space_after=0)
+    if request.destinatario_cargo:
+        agregar_parrafo(request.destinatario_cargo, space_after=0)
+    agregar_parrafo(request.destinatario_institucion, space_after=0)
+    agregar_parrafo("Presente. –", space_after=12)
+
+    p_asunto = doc.add_paragraph()
+    p_asunto.paragraph_format.space_after = Pt(4)
+    r1 = p_asunto.add_run("Asunto:\t"); r1.bold = True; r1.font.name = 'Arial'; r1.font.size = Pt(11)
+    r2 = p_asunto.add_run(request.asunto); r2.bold = True; r2.font.name = 'Arial'; r2.font.size = Pt(11)
+
+    if request.referencias and request.referencias.strip():
+        p_ref = doc.add_paragraph()
+        p_ref.paragraph_format.space_after = Pt(12)
+        r_lbl = p_ref.add_run("Referencia:\t"); r_lbl.bold = True; r_lbl.font.name = 'Arial'; r_lbl.font.size = Pt(11)
+        r_val = p_ref.add_run(request.referencias); r_val.font.name = 'Arial'; r_val.font.size = Pt(11)
+    else:
+        agregar_parrafo("", space_after=12)
+
+    agregar_parrafo("De mi especial consideración.", space_after=8)
+
+    for linea in request.cuerpo.split('\n'):
+        if linea.strip():
+            p = agregar_parrafo(linea.strip(), space_after=6)
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    p_cierre = agregar_parrafo(request.cierre, space_after=24)
+    p_cierre.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    agregar_parrafo("Atentamente,", space_after=0)
+
+    firma_imagen = get_cfg("firma_imagen")
+    firma_nombre = get_cfg("firma_nombre", "").strip()
+    firma_cargo  = get_cfg("firma_cargo", "").strip()
+
+    if firma_imagen:
+        ruta_firma = os.path.join(UPLOAD_DIR, firma_imagen)
+        if os.path.exists(ruta_firma):
+            # ── Recortar espacio en blanco de la imagen de firma ──
+            ruta_firma_uso = ruta_firma
+            ruta_firma_tmp = None
+            try:
+                from PIL import Image as _PILImage
+                import tempfile as _tempfile
+                img = _PILImage.open(ruta_firma)
+                img_gray = img.convert('L')
+                # Máscara: píxeles no blancos (firma es oscura, fondo es blanco)
+                mask = img_gray.point(lambda x: 0 if x > 240 else 255)
+                bbox = mask.getbbox()
+                if bbox:
+                    pad = 10  # px de margen alrededor de la firma
+                    left  = max(0, bbox[0] - pad)
+                    top   = max(0, bbox[1] - pad)
+                    right = min(img.width,  bbox[2] + pad)
+                    bottom= min(img.height, bbox[3] + pad)
+                    img_recortada = img.crop((left, top, right, bottom))
+                    tmp = _tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                    ruta_firma_tmp = tmp.name
+                    tmp.close()
+                    img_recortada.save(ruta_firma_tmp, 'PNG')
+                    ruta_firma_uso = ruta_firma_tmp
+            except Exception as _e:
+                print(f"Advertencia al recortar firma: {_e}")
+
+            # ── Imagen de firma (derecha, compacta, sobre la línea) ──
+            p_img = doc.add_paragraph()
+            p_img.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            p_img.paragraph_format.space_before = Pt(6)
+            p_img.paragraph_format.space_after = Pt(0)
+            r_img = p_img.add_run()
+            r_img.add_picture(ruta_firma_uso, height=DocxCm(2.0))
+
+            if ruta_firma_tmp:
+                try:
+                    os.unlink(ruta_firma_tmp)
+                except Exception:
+                    pass
+        else:
+            agregar_parrafo("", space_before=36, space_after=0)
+    else:
+        agregar_parrafo("", space_before=36, space_after=0)
+
+    # ── Línea + nombre + cargo (siempre a la derecha) ──
+    agregar_parrafo("____________________________", align=WD_ALIGN_PARAGRAPH.RIGHT, space_before=0, space_after=0)
+    if firma_nombre:
+        agregar_parrafo(firma_nombre, bold=True, align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=0)
+    if firma_cargo:
+        agregar_parrafo(firma_cargo, align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=0)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def _docx_a_pdf(ruta_docx: str, ruta_pdf: str) -> bool:
+    """
+    Convierte un .docx a PDF. Intenta con docx2pdf (Word en Windows),
+    luego con LibreOffice como fallback. Retorna True si tuvo éxito.
+    """
+    # Intento 1: docx2pdf (usa Microsoft Word via COM en Windows)
+    try:
+        from docx2pdf import convert
+        convert(ruta_docx, ruta_pdf)
+        if os.path.exists(ruta_pdf) and os.path.getsize(ruta_pdf) > 0:
+            return True
+    except Exception as e:
+        print(f"docx2pdf falló: {e}")
+
+    # Intento 2: LibreOffice headless
+    try:
+        import subprocess
+        out_dir = os.path.dirname(ruta_pdf)
+        result = subprocess.run(
+            ['soffice', '--headless', '--convert-to', 'pdf', '--outdir', out_dir, ruta_docx],
+            capture_output=True, timeout=60
+        )
+        # LibreOffice genera el PDF con el mismo nombre base del .docx
+        nombre_base = os.path.splitext(os.path.basename(ruta_docx))[0]
+        pdf_generado = os.path.join(out_dir, nombre_base + '.pdf')
+        if os.path.exists(pdf_generado):
+            if pdf_generado != ruta_pdf:
+                os.rename(pdf_generado, ruta_pdf)
+            return os.path.exists(ruta_pdf) and os.path.getsize(ruta_pdf) > 0
+    except Exception as e:
+        print(f"LibreOffice también falló: {e}")
+
+    return False
+
+
+@app.post("/api/guardar-carta")
+def guardar_carta(
+    request: ExportarCartaRequest,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """
+    Guarda la carta en el sistema:
+    - Verifica que el número no exista ya para ese año
+    - Si hay conflicto retorna 409 con el siguiente número disponible
+    - Si OK: genera .docx + PDF, guarda en uploads, registra en documentos y expediente
+    """
+    def get_cfg(clave, default=""):
+        row = db.query(ConfiguracionSistema).filter(ConfiguracionSistema.clave == clave).first()
+        return row.valor if row and row.valor else default
+
+    m = re.search(r'(\d+)-(\d{4})', request.numero_carta)
+    if not m:
+        raise HTTPException(status_code=400, detail="Formato de número de carta no reconocido")
+    correlativo = int(m.group(1))
+    anio = int(m.group(2))
+
+    existe = db.query(CartaGenerada).filter(
+        CartaGenerada.numero_correlativo == correlativo,
+        CartaGenerada.anio == anio
+    ).first()
+
+    if existe:
+        ultima = (
+            db.query(CartaGenerada)
+            .filter(CartaGenerada.anio == anio)
+            .order_by(CartaGenerada.numero_correlativo.desc())
+            .first()
+        )
+        siguiente = (ultima.numero_correlativo + 1) if ultima else 1
+        digitos = int(get_cfg("carta_digitos", "6"))
+        sufijo = get_cfg("carta_sufijo", "").strip()
+        correlativo_str = str(siguiente).zfill(digitos)
+        numero_sugerido = f"Carta N° {correlativo_str}-{anio}-{sufijo}" if sufijo else f"Carta N° {correlativo_str}-{anio}"
+        raise HTTPException(
+            status_code=409,
+            detail=f"El número '{request.numero_carta}' ya existe. Número disponible: {numero_sugerido}"
+        )
+
+    contrato_id = request.contrato_id
+
+    # Registrar en cartas_generadas
+    nueva_carta = CartaGenerada(
+        numero_correlativo=correlativo,
+        anio=anio,
+        numero_completo=request.numero_carta,
+        contrato_id=contrato_id,
+        asunto=request.asunto,
+    )
+    db.add(nueva_carta)
+
+    # Registrar en documentos (sin archivos aún)
+    nuevo_doc = Documento(
+        tipo_documento='carta',
+        direccion='enviado',
+        numero=request.numero_carta,
+        fecha=datetime.now(),
+        destinatario=f"{request.destinatario_nombre} - {request.destinatario_institucion}",
+        asunto=request.asunto,
+        titulo=request.asunto,
+        resumen=request.cuerpo[:500] if request.cuerpo else "",
+        correlativo_oficio=correlativo,
+        anio_oficio=anio,
+        estado='borrador',
+    )
+    db.add(nuevo_doc)
+    db.flush()  # Obtener nuevo_doc.id
+
+    # ── Generar y guardar .docx ──
+    nombre_base = re.sub(r'[^\w\-]', '_', request.numero_carta.replace(' ', '_').replace('°', ''))
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nombre_docx = f"carta_{nuevo_doc.id}_{timestamp}_{nombre_base}.docx"
+    nombre_pdf  = f"carta_{nuevo_doc.id}_{timestamp}_{nombre_base}.pdf"
+    ruta_docx = os.path.join(UPLOAD_DIR, nombre_docx)
+    ruta_pdf  = os.path.join(UPLOAD_DIR, nombre_pdf)
+
+    try:
+        buffer_docx = _construir_docx_buffer(request, db)
+        with open(ruta_docx, 'wb') as f:
+            f.write(buffer_docx.getvalue())
+        nuevo_doc.archivo_docx = nombre_docx
+
+        # Convertir a PDF
+        if _docx_a_pdf(ruta_docx, ruta_pdf):
+            nuevo_doc.archivo_local = nombre_pdf
+        else:
+            print(f"Advertencia: no se pudo convertir a PDF para carta {request.numero_carta}")
+    except Exception as e:
+        print(f"Error generando archivos de carta: {e}")
+        # Continuar sin archivos — la carta queda registrada igualmente
+
+    # Registrar en expediente del contrato si hay contrato_id
+    if contrato_id:
+        contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+        if contrato:
+            expediente = ExpedienteContrato(
+                contrato_id=contrato_id,
+                tipo_doc='Carta Enviada',
+                numero=request.numero_carta,
+                fecha=datetime.now(),
+                asunto=request.asunto,
+                archivo_local=nombre_pdf if nuevo_doc.archivo_local else None,
+            )
+            db.add(expediente)
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "numero_carta": request.numero_carta,
+        "documento_id": nuevo_doc.id,
+        "tiene_pdf": bool(nuevo_doc.archivo_local),
+        "tiene_docx": bool(nuevo_doc.archivo_docx),
+        "mensaje": f"Carta '{request.numero_carta}' guardada en el sistema"
+    }
+
+
+@app.post("/api/exportar-carta")
+def exportar_carta_docx(
+    request: ExportarCartaRequest,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(verificar_admin)
+):
+    """
+    Genera y descarga el .docx de la carta (sin guardar en el sistema).
+    Usa _construir_docx_buffer internamente.
+    """
+    try:
+        buffer = _construir_docx_buffer(request, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando carta: {str(e)}")
+
+    num_limpio = re.sub(r'[^\w\-]', '_', request.numero_carta.replace(' ', '_').replace('°', ''))
+    nombre_descarga = f"{num_limpio}.docx"
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{nombre_descarga}"'}
+    )
+
+
+# ============================================
+# SEGUIMIENTO LIQUIDACIÓN
+# ============================================
+
+CAMPOS_SIONO = {
+    'acta_revisada', 'acta_remitida_ugpe',
+    'mod_presentado_ne', 'mod_revisado_aprobado', 'mod_remitido_ugpe',
+    'amp_presentado_ne', 'amp_revisado_aprobado', 'amp_adenda_firmada', 'amp_remitido_ugpe',
+    'dossier_presentado_ne', 'dossier_revisado_aprobado', 'dossier_remitido_ugpe', 'dossier_remitido_pago',
+    'liq_presentado_ne', 'liq_revisado_aprobado', 'liq_remitido_pago',
+}
+
+def _color(hex_color):
+    return PatternFill("solid", fgColor=hex_color)
+
+def _border():
+    thin = Side(style='thin', color='000000')
+    return Border(left=thin, right=thin, top=thin, bottom=thin)
+
+def _font(bold=False, color="000000", size=9):
+    return Font(bold=bold, color=color, size=size)
+
+def _align(horizontal="center", wrap=True):
+    return Alignment(horizontal=horizontal, vertical="center", wrap_text=wrap)
+
+@app.get("/api/seguimiento/exportar-excel")
+def exportar_seguimiento_excel(db: Session = Depends(get_db)):
+    """Exporta la tabla de seguimiento como Excel con formato igual al original."""
+    filas = db.query(SeguimientoComisaria).order_by(SeguimientoComisaria.numero).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Seguimiento Liquidación"
+    ws.sheet_view.showGridLines = False
+
+    # Paleta de colores (BGR hex para openpyxl)
+    C_TITLE   = "1F3864"   # Azul muy oscuro
+    C_GRP1    = "1F497D"   # Azul oscuro  - Acta
+    C_GRP2    = "243F60"   # Azul indigo  - Mod
+    C_GRP3    = "3A3680"   # Purpura      - Amp
+    C_GRP4    = "215868"   # Teal         - Dossier
+    C_GRP5    = "215832"   # Verde        - Liq
+    C_HDR_TXT = "FFFFFF"
+    C_SI      = "C6EFCE"   # Verde claro
+    C_SI_TXT  = "276221"
+    C_NO      = "FFC7CE"   # Rojo claro
+    C_NO_TXT  = "9C0006"
+    C_NA      = "EDEDED"
+    C_NA_TXT  = "7F7F7F"
+    C_ALT     = "F2F2F2"   # Fila par
+
+    brd = _border()
+
+    # ── FILA 1: Título ──────────────────────────────────────────────
+    ws.merge_cells("A1:X1")
+    c = ws["A1"]
+    c.value = "SEGUIMIENTO AL PROCESO DE LIQUIDACIÓN - MANTENIMIENTO Y ACONDICIONAMIENTO DE COMISARÍAS"
+    c.fill = _color(C_TITLE)
+    c.font = _font(bold=True, color=C_HDR_TXT, size=11)
+    c.alignment = _align("center")
+    c.border = brd
+    ws.row_dimensions[1].height = 22
+
+    # ── FILA 2: Encabezados de grupo ────────────────────────────────
+    grupos = [
+        ("A2","A3","N°",              None),
+        ("B2","B3","COMISARÍA PNP",  None),
+        ("C2","D2","AVANCE DE EJECUCIÓN", None),
+        ("E2","E3","FECHA FINAL\nEJECUCIÓN CONTRACTUAL", None),
+        ("F2","H2","1. ACTA DE CONFORMIDAD\nDE EJECUCIÓN Y RECEPCIÓN FÍSICA", C_GRP1),
+        ("I2","K2","2. INFORME DE MODIFICACIÓN\nDE PARTIDAS (UGPE)", C_GRP2),
+        ("L2","O2","3. INFORME DE\nAMPLIACIÓN DE PLAZO", C_GRP3),
+        ("P2","T2","4. INFORME DE CULMINACIÓN Y\nENTREGA DE OBRA (DOSSIER)", C_GRP4),
+        ("U2","W2","5. INFORME DE LIQUIDACIÓN\n(FINAL)", C_GRP5),
+        ("X2","X3","OBSERVACIONES", None),
+    ]
+    for start, end, label, color in grupos:
+        if start != end:
+            ws.merge_cells(f"{start}:{end}")
+        cell = ws[start]
+        cell.value = label
+        cell.fill = _color(color or C_TITLE)
+        cell.font = _font(bold=True, color=C_HDR_TXT, size=8)
+        cell.alignment = _align("center")
+        cell.border = brd
+    ws.row_dimensions[2].height = 30
+
+    # ── FILA 3: Sub-encabezados ─────────────────────────────────────
+    # Columnas C y D (avance)
+    ws.merge_cells("A2:A3")
+    ws.merge_cells("B2:B3")
+    ws.merge_cells("E2:E3")
+    ws.merge_cells("X2:X3")
+
+    sub_hdrs = [
+        ("C3", "PROGRAMADO",    None),
+        ("D3", "FÍSICO",        None),
+        ("F3", "FECHA FIRMA\nACTA",         C_GRP1),
+        ("G3", "REVISADA Y\nAPROBADA",      C_GRP1),
+        ("H3", "REMITIDA\nA UGPE",          C_GRP1),
+        ("I3", "PRESENTADO\nAL NE",         C_GRP2),
+        ("J3", "REVISADO Y\nAPROBADO",      C_GRP2),
+        ("K3", "REMITIDO\nA UGPE",          C_GRP2),
+        ("L3", "PRESENTADO\nAL NE",         C_GRP3),
+        ("M3", "REVISADO Y\nAPROBADO",      C_GRP3),
+        ("N3", "ADENDA\nFIRMADA",           C_GRP3),
+        ("O3", "REMITIDO\nA UGPE",          C_GRP3),
+        ("P3", "PRESENTADO\nAL NE",         C_GRP4),
+        ("Q3", "REVISADO Y\nAPROBADO",      C_GRP4),
+        ("R3", "REMITIDO\nA UGPE",          C_GRP4),
+        ("S3", "REMITIDO\nPARA PAGO",       C_GRP4),
+        ("T3", "MONTO\nPAGADO (S/)",        C_GRP4),
+        ("U3", "PRESENTADO\nAL NE",         C_GRP5),
+        ("V3", "REVISADO Y\nAPROBADO",      C_GRP5),
+        ("W3", "REMITIDO\nPARA PAGO",       C_GRP5),
+    ]
+    for cell_ref, label, color in sub_hdrs:
+        c = ws[cell_ref]
+        c.value = label
+        c.fill = _color(color or C_TITLE)
+        c.font = _font(bold=True, color=C_HDR_TXT, size=8)
+        c.alignment = _align("center")
+        c.border = brd
+    ws.row_dimensions[3].height = 30
+
+    # ── FILAS DE DATOS ───────────────────────────────────────────────
+    campos_siono = [
+        'acta_revisada','acta_remitida_ugpe',
+        'mod_presentado_ne','mod_revisado_aprobado','mod_remitido_ugpe',
+        'amp_presentado_ne','amp_revisado_aprobado','amp_adenda_firmada','amp_remitido_ugpe',
+        'dossier_presentado_ne','dossier_revisado_aprobado','dossier_remitido_ugpe','dossier_remitido_pago',
+        'liq_presentado_ne','liq_revisado_aprobado','liq_remitido_pago',
+    ]
+    # Mapa campo → columna (G..W, omitiendo T=monto y F=fecha_firma)
+    col_map = {campo: idx for idx, campo in enumerate(campos_siono, start=7)}
+    # Ajuste: insertar T (col 20) para monto después de dossier_remitido_pago (col 19)
+    for campo, col in list(col_map.items()):
+        if col >= 20:  # U,V,W → desplazar +1 por la col T del monto
+            col_map[campo] = col + 1
+
+    for r_idx, row in enumerate(filas, start=4):
+        excel_row = r_idx
+        bg = None if r_idx % 2 == 0 else C_ALT
+
+        def cell(col_num):
+            return ws.cell(row=excel_row, column=col_num)
+
+        # N°
+        cell(1).value = row.numero
+        cell(1).font = _font(bold=True)
+        # Comisaría
+        cell(2).value = row.comisaria
+        cell(2).font = _font(bold=False)
+        cell(2).alignment = _align("left", wrap=False)
+        # Avance programado / físico
+        cell(3).value = row.avance_programado
+        cell(3).number_format = "0%"
+        cell(4).value = row.avance_fisico
+        cell(4).number_format = "0.00%"
+        # Fecha fin contractual
+        if row.fecha_fin_contractual:
+            cell(5).value = row.fecha_fin_contractual
+            cell(5).number_format = "DD/MM/YYYY"
+        # Fecha firma acta (col F=6)
+        if row.acta_fecha_firma:
+            cell(6).value = row.acta_fecha_firma
+            cell(6).number_format = "DD/MM/YYYY"
+
+        # Campos SI/NO
+        for campo, col_num in col_map.items():
+            val = getattr(row, campo) or ''
+            c = cell(col_num)
+            c.value = val
+            c.alignment = _align("center")
+            if val == 'SI':
+                c.fill = _color(C_SI)
+                c.font = _font(bold=True, color=C_SI_TXT)
+            elif val == 'NO':
+                c.fill = _color(C_NO)
+                c.font = _font(bold=True, color=C_NO_TXT)
+            elif val in ('NA', '-'):
+                c.fill = _color(C_NA)
+                c.font = _font(color=C_NA_TXT)
+
+        # Monto pagado (col T = 20)
+        if row.dossier_monto_pagado is not None:
+            cell(20).value = row.dossier_monto_pagado
+            cell(20).number_format = '#,##0.00'
+            cell(20).alignment = _align("right")
+
+        # Observaciones (col X = 24)
+        cell(24).value = row.observaciones or ''
+        cell(24).alignment = _align("left")
+
+        # Aplicar borde y fondo alternado a toda la fila
+        for col_num in range(1, 25):
+            c = cell(col_num)
+            c.border = brd
+            if bg and c.fill.fgColor.rgb in ("00000000", "00FFFFFF", "FFFFFFFF"):
+                c.fill = _color(bg)
+            if c.alignment.horizontal is None:
+                c.alignment = _align("center")
+
+        ws.row_dimensions[excel_row].height = 15
+
+    # ── ANCHOS DE COLUMNA ────────────────────────────────────────────
+    col_widths = {1:4, 2:22, 3:7, 4:7, 5:11, 6:11,
+                  7:9,8:9,9:9,10:9,11:9,12:9,13:9,14:9,15:9,
+                  16:9,17:9,18:9,19:9,20:12,21:9,22:9,23:9,24:22}
+    for col_num, width in col_widths.items():
+        ws.column_dimensions[get_column_letter(col_num)].width = width
+
+    # ── FILA TOTALES ─────────────────────────────────────────────────
+    total_row = len(filas) + 4
+    ws.cell(total_row, 2).value = "PROMEDIO"
+    ws.cell(total_row, 2).font = _font(bold=True)
+    ws.cell(total_row, 3).value = f"=AVERAGE(C4:C{total_row-1})"
+    ws.cell(total_row, 3).number_format = "0%"
+    ws.cell(total_row, 4).value = f"=AVERAGE(D4:D{total_row-1})"
+    ws.cell(total_row, 4).number_format = "0.00%"
+    for col_num in range(1, 25):
+        c = ws.cell(total_row, col_num)
+        c.border = brd
+        c.fill = _color("D9E1F2")
+        if c.font.bold is None:
+            c.font = _font(bold=True)
+    ws.row_dimensions[total_row].height = 15
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fecha = datetime.now().strftime("%Y%m%d")
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="seguimiento_liquidacion_{fecha}.xlsx"'}
+    )
+
+
+@app.get("/api/seguimiento", response_model=List[SeguimientoComisariaResponse])
+def get_seguimiento(db: Session = Depends(get_db)):
+    """Retorna todas las filas de seguimiento. Público (sin autenticación)."""
+    return db.query(SeguimientoComisaria).order_by(SeguimientoComisaria.numero).all()
+
+
+@app.put("/api/seguimiento/{comisaria_id}/celda")
+def actualizar_celda(
+    comisaria_id: int,
+    request: ActualizarCeldaRequest,
+    db: Session = Depends(get_db),
+    payload: dict = Depends(verificar_admin)
+):
+    """Actualiza el valor de un campo en una comisaría. Requiere autenticación."""
+    comisaria = db.query(SeguimientoComisaria).filter(SeguimientoComisaria.id == comisaria_id).first()
+    if not comisaria:
+        raise HTTPException(status_code=404, detail="Comisaría no encontrada")
+
+    campo = request.campo
+    if not hasattr(comisaria, campo):
+        raise HTTPException(status_code=400, detail=f"Campo '{campo}' no existe")
+
+    valor_anterior = getattr(comisaria, campo)
+
+    # Convertir el valor según el tipo del campo
+    CAMPOS_FECHA = {'fecha_fin_contractual', 'acta_fecha_firma'}
+    CAMPOS_FLOAT = {'avance_fisico', 'avance_programado', 'dossier_monto_pagado'}
+    valor_convertido = request.valor
+    if request.valor is not None and request.valor != '':
+        if campo in CAMPOS_FECHA:
+            try:
+                valor_convertido = datetime.strptime(request.valor[:10], '%Y-%m-%d')
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Formato de fecha inválido (esperado YYYY-MM-DD)")
+        elif campo in CAMPOS_FLOAT:
+            try:
+                valor_convertido = float(request.valor)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Valor numérico inválido")
+    elif request.valor == '':
+        valor_convertido = None
+
+    setattr(comisaria, campo, valor_convertido)
+    comisaria.updated_at = datetime.now()
+
+    nombre_usuario = payload.get("sub") or payload.get("username", "desconocido")
+
+    # Si cambia a SI y hay detalle, registrarlo
+    if request.valor == 'SI' and campo in CAMPOS_SIONO:
+        if request.observacion or request.enlace:
+            detalle = SeguimientoCeldaDetalle(
+                comisaria_id=comisaria_id,
+                campo=campo,
+                observacion=request.observacion,
+                enlace=request.enlace,
+                usuario=nombre_usuario,
+                fecha_actualizacion=datetime.now()
+            )
+            db.add(detalle)
+
+    db.commit()
+    db.refresh(comisaria)
+    return {"ok": True, "valor_anterior": valor_anterior, "valor_nuevo": request.valor}
+
+
+@app.post("/api/seguimiento/{comisaria_id}/celda/{campo}/archivo")
+async def subir_archivo_celda(
+    comisaria_id: int,
+    campo: str,
+    archivo: UploadFile = File(...),
+    observacion: Optional[str] = None,
+    enlace: Optional[str] = None,
+    db: Session = Depends(get_db),
+    payload: dict = Depends(verificar_admin)
+):
+    """Sube un archivo adjunto al detalle de una celda. Requiere autenticación."""
+    comisaria = db.query(SeguimientoComisaria).filter(SeguimientoComisaria.id == comisaria_id).first()
+    if not comisaria:
+        raise HTTPException(status_code=404, detail="Comisaría no encontrada")
+
+    ext = os.path.splitext(archivo.filename)[1]
+    nombre_archivo = f"seg_{comisaria_id}_{campo}_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext}"
+    ruta = os.path.join(UPLOAD_DIR, nombre_archivo)
+    with open(ruta, "wb") as f:
+        f.write(await archivo.read())
+
+    nombre_usuario = payload.get("sub") or payload.get("username", "desconocido")
+    detalle = SeguimientoCeldaDetalle(
+        comisaria_id=comisaria_id,
+        campo=campo,
+        observacion=observacion,
+        enlace=enlace,
+        archivo_local=nombre_archivo,
+        archivo_nombre=archivo.filename,
+        usuario=nombre_usuario,
+        fecha_actualizacion=datetime.now()
+    )
+    db.add(detalle)
+    db.commit()
+    return {"ok": True, "archivo": nombre_archivo, "ruta": f"/uploads/{nombre_archivo}"}
+
+
+# ============================================
 # SERVIR FRONTEND
 # ============================================
 
@@ -1243,6 +2563,14 @@ async def serve_frontend():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "Frontend no encontrado", "api_docs": "/docs"}
+
+@app.get("/seguimiento")
+async def serve_frontend_seguimiento():
+    """URL directa a la vista de seguimiento — el JS se encarga de navegar al cargar."""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "Frontend no encontrado"}
 
 
 # ============================================

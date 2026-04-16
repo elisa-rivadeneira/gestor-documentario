@@ -42,10 +42,15 @@ class Documento(Base):
     anio_oficio = Column(Integer, nullable=True)  # Año extraído del número (para ordenamiento)
     correlativo_oficio = Column(Integer, nullable=True)  # Número correlativo (para ordenamiento)
     enlace_drive = Column(String(500), nullable=True)  # Link a Google Drive
-    archivo_local = Column(String(500), nullable=True)  # Ruta archivo subido
+    archivo_local = Column(String(500), nullable=True)  # Ruta archivo subido (PDF)
+    archivo_docx = Column(String(500), nullable=True)   # Ruta archivo Word (solo cartas IA)
 
     # Relación padre-hijo para respuestas
     documento_padre_id = Column(Integer, ForeignKey("documentos.id"), nullable=True)
+
+    # Estado del documento (solo relevante para cartas generadas con IA)
+    # 'enviado' es el default para todos los documentos existentes y los nuevos no-IA
+    estado = Column(String(20), default='enviado')
 
     # Timestamps
     created_at = Column(DateTime, server_default=func.now())
@@ -99,8 +104,9 @@ class Contrato(Base):
     fecha = Column(DateTime, nullable=True)
     tipo_contrato = Column(String(20), nullable=True)  # equipamiento, mantenimiento
     contratante = Column(String(255), nullable=True)
-    ruc_contratado = Column(String(11), nullable=True)  # RUC del contratado
-    contratado = Column(String(255), nullable=True)  # Razón social del contratado
+    tipo_contratado = Column(String(20), nullable=True, default='empresa')  # empresa | consorcio
+    ruc_contratado = Column(String(11), nullable=True)  # RUC del contratado (solo empresa)
+    contratado = Column(String(255), nullable=True)  # Razón social o nombre del consorcio
     item_contratado = Column(String(500), nullable=True)
     # Campos de plazo
     plazo_dias = Column(Integer, nullable=True)  # Número de días del contrato
@@ -114,6 +120,12 @@ class Contrato(Base):
     archivo_local = Column(String(500), nullable=True)
     enlace_drive = Column(String(500), nullable=True)
     estado_ejecucion = Column(String(30), default='PENDIENTE')  # PENDIENTE, EN PROCESO, EN VALIDACIÓN, CONFORME
+
+    # Datos del representante (para cartas)
+    nombre_representante = Column(String(255), nullable=True)
+    cargo_representante = Column(String(255), nullable=True)
+    email_representante = Column(String(255), nullable=True)
+    whatsapp_representante = Column(String(20), nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -162,6 +174,51 @@ class ExpedienteContrato(Base):
     contrato = relationship("Contrato", back_populates="expediente")
 
 
+class PlantillaCarta(Base):
+    """
+    Plantilla de carta institucional.
+    El archivo .docx sirve de referencia estructural para la IA al generar cartas.
+    """
+    __tablename__ = "plantillas_carta"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(255), nullable=False)
+    descripcion = Column(Text, nullable=True)
+    archivo_local = Column(String(500), nullable=True)  # Ruta al .docx de referencia
+    activa = Column(Integer, default=1)  # 1 = activa (plantilla principal)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+
+class ConfiguracionSistema(Base):
+    """
+    Configuración global del sistema (clave-valor).
+    Se usa para guardar membrete, logo, etc.
+    """
+    __tablename__ = "configuracion_sistema"
+
+    id = Column(Integer, primary_key=True, index=True)
+    clave = Column(String(100), unique=True, nullable=False)
+    valor = Column(Text, nullable=True)
+    updated_at = Column(DateTime, onupdate=func.now())
+
+
+class CartaGenerada(Base):
+    """
+    Registro de cartas generadas por IA.
+    Permite llevar el correlativo propio de cartas independiente de otros documentos.
+    """
+    __tablename__ = "cartas_generadas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    numero_correlativo = Column(Integer, nullable=False)  # 1, 2, 3 ...
+    anio = Column(Integer, nullable=False)
+    numero_completo = Column(String(200), nullable=False)  # "Carta N° 000001-2026-..."
+    contrato_id = Column(Integer, ForeignKey("contratos.id"), nullable=True)
+    asunto = Column(String(500), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class AdjuntoContrato(Base):
     """
     Modelo para archivos adjuntos de contratos.
@@ -176,3 +233,72 @@ class AdjuntoContrato(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     contrato = relationship("Contrato", back_populates="adjuntos")
+
+
+class SeguimientoComisaria(Base):
+    """
+    Seguimiento del proceso de liquidación por comisaría PNP.
+    Una fila por comisaría con todos los campos SI/NO del Excel.
+    """
+    __tablename__ = "seguimiento_comisaria"
+
+    id = Column(Integer, primary_key=True, index=True)
+    numero = Column(Integer, nullable=False)
+    comisaria = Column(String(255), nullable=False)
+    avance_programado = Column(Float, nullable=True)
+    avance_fisico = Column(Float, nullable=True)
+    fecha_fin_contractual = Column(DateTime, nullable=True)
+
+    # 1. Acta de Conformidad
+    acta_fecha_firma = Column(DateTime, nullable=True)
+    acta_revisada = Column(String(5), nullable=True)          # SI/NO/NA/-
+    acta_remitida_ugpe = Column(String(5), nullable=True)
+
+    # 2. Informe de Modificación de Partidas
+    mod_presentado_ne = Column(String(5), nullable=True)
+    mod_revisado_aprobado = Column(String(5), nullable=True)
+    mod_remitido_ugpe = Column(String(5), nullable=True)
+
+    # 3. Informe de Ampliación de Plazo
+    amp_presentado_ne = Column(String(5), nullable=True)
+    amp_revisado_aprobado = Column(String(5), nullable=True)
+    amp_adenda_firmada = Column(String(5), nullable=True)
+    amp_remitido_ugpe = Column(String(5), nullable=True)
+
+    # 4. Informe de Culminación y Entrega de Obra (DOSSIER)
+    dossier_presentado_ne = Column(String(5), nullable=True)
+    dossier_revisado_aprobado = Column(String(5), nullable=True)
+    dossier_remitido_ugpe = Column(String(5), nullable=True)
+    dossier_remitido_pago = Column(String(5), nullable=True)
+    dossier_monto_pagado = Column(Float, nullable=True)
+
+    # 5. Informe de Liquidación (Final)
+    liq_presentado_ne = Column(String(5), nullable=True)
+    liq_revisado_aprobado = Column(String(5), nullable=True)
+    liq_remitido_pago = Column(String(5), nullable=True)
+
+    observaciones = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    detalles = relationship("SeguimientoCeldaDetalle", back_populates="comisaria", cascade="all, delete-orphan")
+
+
+class SeguimientoCeldaDetalle(Base):
+    """
+    Registro de detalle cuando un campo pasa a SI.
+    Guarda observaciones, enlace y/o archivo adjunto, y quién/cuándo lo actualizó.
+    """
+    __tablename__ = "seguimiento_celda_detalle"
+
+    id = Column(Integer, primary_key=True, index=True)
+    comisaria_id = Column(Integer, ForeignKey("seguimiento_comisaria.id"), nullable=False)
+    campo = Column(String(100), nullable=False)       # Nombre del campo actualizado
+    observacion = Column(Text, nullable=True)
+    enlace = Column(String(500), nullable=True)
+    archivo_local = Column(String(500), nullable=True)
+    archivo_nombre = Column(String(255), nullable=True)
+    usuario = Column(String(100), nullable=False)
+    fecha_actualizacion = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    comisaria = relationship("SeguimientoComisaria", back_populates="detalles")

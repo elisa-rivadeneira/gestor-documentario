@@ -78,6 +78,7 @@ class DocumentoResponse(DocumentoBase):
     """Schema para respuesta de documento"""
     id: int
     archivo_local: Optional[str] = None
+    archivo_docx: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     adjuntos: List[AdjuntoResponse] = []
@@ -205,6 +206,7 @@ class ContratoBase(BaseModel):
     fecha: Optional[datetime] = None
     tipo_contrato: Optional[str] = None  # equipamiento, mantenimiento
     contratante: Optional[str] = None
+    tipo_contratado: Optional[str] = 'empresa'  # empresa | consorcio
     ruc_contratado: Optional[str] = None
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
@@ -217,6 +219,11 @@ class ContratoBase(BaseModel):
     resumen: Optional[str] = None
     enlace_drive: Optional[str] = None
     estado_ejecucion: Optional[str] = 'PENDIENTE'  # PENDIENTE, EN PROCESO, EN VALIDACIÓN, CONFORME
+    # Datos del representante
+    nombre_representante: Optional[str] = None
+    cargo_representante: Optional[str] = None
+    email_representante: Optional[str] = None
+    whatsapp_representante: Optional[str] = None
 
 
 class ContratoCreate(ContratoBase):
@@ -230,6 +237,7 @@ class ContratoUpdate(BaseModel):
     fecha: Optional[datetime] = None
     tipo_contrato: Optional[str] = None
     contratante: Optional[str] = None
+    tipo_contratado: Optional[str] = None
     ruc_contratado: Optional[str] = None
     contratado: Optional[str] = None
     item_contratado: Optional[str] = None
@@ -243,6 +251,10 @@ class ContratoUpdate(BaseModel):
     enlace_drive: Optional[str] = None
     estado_ejecucion: Optional[str] = None
     comisarias: Optional[List[ComisariaContratoCreate]] = None
+    nombre_representante: Optional[str] = None
+    cargo_representante: Optional[str] = None
+    email_representante: Optional[str] = None
+    whatsapp_representante: Optional[str] = None
 
 
 class ContratoResponse(ContratoBase):
@@ -302,3 +314,116 @@ class ExpedienteContratoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# === Schemas para Plantillas de Carta ===
+
+class PlantillaCartaCreate(BaseModel):
+    nombre: str
+    descripcion: Optional[str] = None
+
+
+class PlantillaCartaResponse(BaseModel):
+    id: int
+    nombre: str
+    descripcion: Optional[str] = None
+    archivo_local: Optional[str] = None
+    activa: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# === Schemas para Generador de Cartas IA ===
+
+class GenerarCartaRequest(BaseModel):
+    contrato_id: int
+    asunto: str
+    referencias: Optional[str] = None       # Texto libre con referencias (ej. "a) Convenio N°005...")
+    instrucciones: Optional[str] = None     # Instrucciones adicionales para la IA
+    plantilla_id: Optional[int] = None      # Plantilla de referencia (opcional)
+
+
+class GenerarCartaResponse(BaseModel):
+    numero_carta: str           # Número sugerido para la carta
+    fecha_texto: str            # Ej: "Lima, 13 de abril de 2026"
+    destinatario_nombre: str
+    destinatario_cargo: str
+    destinatario_institucion: str
+    asunto: str
+    referencias: str
+    cuerpo: str                 # Cuerpo completo de la carta
+    cierre: str                 # Párrafo de cierre
+    exito: bool = True
+    mensaje: Optional[str] = None
+
+
+class ExportarCartaRequest(BaseModel):
+    numero_carta: str
+    fecha_texto: str
+    destinatario_nombre: str
+    destinatario_cargo: str
+    destinatario_institucion: str
+    asunto: str
+    referencias: Optional[str] = None
+    cuerpo: str
+    cierre: str
+    plantilla_id: Optional[int] = None
+    contrato_id: Optional[int] = None
+
+
+# === Schemas para Seguimiento de Liquidación ===
+
+class SeguimientoCeldaDetalleResponse(BaseModel):
+    id: int
+    campo: str
+    observacion: Optional[str] = None
+    enlace: Optional[str] = None
+    archivo_local: Optional[str] = None
+    archivo_nombre: Optional[str] = None
+    usuario: str
+    fecha_actualizacion: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SeguimientoComisariaResponse(BaseModel):
+    id: int
+    numero: int
+    comisaria: str
+    avance_programado: Optional[float] = None
+    avance_fisico: Optional[float] = None
+    fecha_fin_contractual: Optional[datetime] = None
+    acta_fecha_firma: Optional[datetime] = None
+    acta_revisada: Optional[str] = None
+    acta_remitida_ugpe: Optional[str] = None
+    mod_presentado_ne: Optional[str] = None
+    mod_revisado_aprobado: Optional[str] = None
+    mod_remitido_ugpe: Optional[str] = None
+    amp_presentado_ne: Optional[str] = None
+    amp_revisado_aprobado: Optional[str] = None
+    amp_adenda_firmada: Optional[str] = None
+    amp_remitido_ugpe: Optional[str] = None
+    dossier_presentado_ne: Optional[str] = None
+    dossier_revisado_aprobado: Optional[str] = None
+    dossier_remitido_ugpe: Optional[str] = None
+    dossier_remitido_pago: Optional[str] = None
+    dossier_monto_pagado: Optional[float] = None
+    liq_presentado_ne: Optional[str] = None
+    liq_revisado_aprobado: Optional[str] = None
+    liq_remitido_pago: Optional[str] = None
+    observaciones: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    detalles: List[SeguimientoCeldaDetalleResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ActualizarCeldaRequest(BaseModel):
+    campo: str
+    valor: Optional[str] = None        # SI / NO / NA / - / None
+    observacion: Optional[str] = None
+    enlace: Optional[str] = None

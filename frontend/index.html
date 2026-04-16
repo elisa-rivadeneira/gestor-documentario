@@ -23,6 +23,14 @@
                             class="admin-only hidden bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium transition">
                         + Nuevo Documento
                     </button>
+                    <!-- Botón Plantillas (solo admin) -->
+                    <button onclick="mostrarPlantillas()"
+                            class="admin-only hidden bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Plantillas
+                    </button>
                     <!-- Info usuario y logout (cuando está logueado) -->
                     <div id="usuario-info" class="hidden flex items-center gap-3">
                         <span id="usuario-nombre" class="text-sm"></span>
@@ -77,7 +85,25 @@
                         </svg>
                         CONTRATOS
                     </button>
+                    <button id="btn-seguimiento" onclick="filtrarPorCategoria('seguimiento')"
+                            class="menu-btn menu-btn-seguimiento flex-1 min-w-[150px] py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        SEGUIMIENTO
+                    </button>
                 </div>
+                <!-- Acción rápida: Nueva Carta IA (solo en CARTAS NEMAEC, admin) -->
+                <div id="barra-nueva-carta" class="hidden admin-only mb-3">
+                    <button onclick="mostrarCreadorCartaLibre()"
+                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                        </svg>
+                        + Nueva Carta con IA
+                    </button>
+                </div>
+
                 <!-- Barra de búsqueda -->
                 <div class="flex gap-2">
                     <input type="text" id="filtro-busqueda"
@@ -644,31 +670,93 @@
                         </div>
 
                         <div class="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                            <label class="block text-sm font-medium text-blue-800 mb-2">Contratado (Proveedor) *</label>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div class="md:col-span-1">
-                                    <label class="block text-xs text-gray-600 mb-1">RUC *</label>
-                                    <div class="flex gap-2">
-                                        <input type="text" id="contrato-ruc" placeholder="20123456789" maxlength="11" required
-                                               class="flex-1 border rounded-lg px-3 py-2 bg-white"
-                                               onkeypress="if(event.key==='Enter'){event.preventDefault();buscarRUC();}">
-                                        <button type="button" onclick="buscarRUC()"
-                                                id="btn-buscar-ruc"
-                                                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg flex items-center gap-1 transition"
-                                                title="Buscar en SUNAT">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="md:col-span-2">
-                                    <label class="block text-xs text-gray-600 mb-1">Razón Social *</label>
-                                    <input type="text" id="contrato-contratado" placeholder="Se completa automáticamente al buscar RUC" required
-                                           class="w-full border rounded-lg px-3 py-2 bg-white">
+                            <div class="flex items-center justify-between mb-3">
+                                <label class="block text-sm font-medium text-blue-800">Contratado *</label>
+                                <!-- Toggle Empresa / Consorcio -->
+                                <div class="flex rounded-lg overflow-hidden border border-blue-300">
+                                    <button type="button" id="btn-tipo-empresa"
+                                            onclick="cambiarTipoContratado('empresa')"
+                                            class="px-3 py-1 text-sm font-medium transition bg-blue-600 text-white">
+                                        Empresa
+                                    </button>
+                                    <button type="button" id="btn-tipo-consorcio"
+                                            onclick="cambiarTipoContratado('consorcio')"
+                                            class="px-3 py-1 text-sm font-medium transition bg-white text-blue-700">
+                                        Consorcio
+                                    </button>
                                 </div>
                             </div>
-                            <p id="ruc-status" class="text-xs text-gray-500 mt-2"></p>
+                            <input type="hidden" id="contrato-tipo-contratado" value="empresa">
+
+                            <!-- Empresa: RUC + Razón Social -->
+                            <div id="bloque-empresa" class="space-y-2">
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div class="md:col-span-1">
+                                        <label class="block text-xs text-gray-600 mb-1">RUC *</label>
+                                        <div class="flex gap-2">
+                                            <input type="text" id="contrato-ruc" placeholder="20123456789" maxlength="11"
+                                                   class="flex-1 border rounded-lg px-3 py-2 bg-white"
+                                                   onkeypress="if(event.key==='Enter'){event.preventDefault();buscarRUC();}">
+                                            <button type="button" onclick="buscarRUC()" id="btn-buscar-ruc"
+                                                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition" title="Buscar en SUNAT">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-xs text-gray-600 mb-1">Razón Social *</label>
+                                        <input type="text" id="contrato-contratado" placeholder="Se completa al buscar RUC"
+                                               class="w-full border rounded-lg px-3 py-2 bg-white">
+                                    </div>
+                                </div>
+                                <p id="ruc-status" class="text-xs text-gray-500"></p>
+                            </div>
+
+                            <!-- Consorcio: solo nombre -->
+                            <div id="bloque-consorcio" class="hidden">
+                                <label class="block text-xs text-gray-600 mb-1">Nombre del Consorcio *</label>
+                                <input type="text" id="contrato-nombre-consorcio" placeholder="Ej: Consorcio Seguridad Peru"
+                                       class="w-full border rounded-lg px-3 py-2 bg-white">
+                            </div>
+
+                            <!-- Representante (ambos tipos) -->
+                            <div class="mt-3 pt-3 border-t border-blue-200">
+                                <p class="text-xs font-medium text-blue-700 mb-2">Representante <span class="text-gray-400">(para cartas)</span></p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">Nombre completo *</label>
+                                        <input type="text" id="contrato-nombre-representante" placeholder="Nombre del representante"
+                                               class="w-full border rounded-lg px-3 py-2 bg-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">Cargo</label>
+                                        <div class="relative">
+                                            <input type="text" id="contrato-cargo-representante"
+                                                   placeholder="Ej: Gerente General"
+                                                   class="w-full border rounded-lg px-3 py-2 bg-white pr-8">
+                                            <button type="button" onclick="sugerirCargo()"
+                                                    title="Sugerir cargo según tipo"
+                                                    class="absolute right-2 top-2 text-blue-400 hover:text-blue-600">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">Email</label>
+                                        <input type="email" id="contrato-email-representante" placeholder="correo@empresa.com"
+                                               class="w-full border rounded-lg px-3 py-2 bg-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">WhatsApp</label>
+                                        <input type="text" id="contrato-whatsapp-representante" placeholder="+51 999 999 999"
+                                               class="w-full border rounded-lg px-3 py-2 bg-white">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="mb-4">
@@ -845,6 +933,13 @@
                                 </svg>
                                 Expediente
                             </button>
+                            <button onclick="mostrarCreadorCarta()"
+                                    class="admin-only hidden bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                                Crear Carta
+                            </button>
                             <div id="det-contrato-botones-admin" class="admin-only hidden flex gap-2">
                                 <button onclick="editarContrato()"
                                         class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg">
@@ -878,12 +973,35 @@
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                         <div>
+                            <span class="text-gray-500">Tipo contratado:</span>
+                            <p id="det-contrato-tipo-contratado" class="font-medium capitalize"></p>
+                        </div>
+                        <div id="det-bloque-ruc">
                             <span class="text-gray-500">RUC:</span>
                             <p id="det-contrato-ruc" class="font-medium"></p>
                         </div>
-                        <div>
+                        <div class="md:col-span-2">
                             <span class="text-gray-500">Contratado:</span>
                             <p id="det-contrato-contratado" class="font-medium"></p>
+                        </div>
+                    </div>
+                    <!-- Representante -->
+                    <div id="det-representante-bloque" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4 p-3 bg-indigo-50 rounded-lg hidden">
+                        <div>
+                            <span class="text-indigo-600">Representante:</span>
+                            <p id="det-contrato-nombre-representante" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-indigo-600">Cargo:</span>
+                            <p id="det-contrato-cargo-representante" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-indigo-600">Email:</span>
+                            <p id="det-contrato-email-representante" class="font-medium"></p>
+                        </div>
+                        <div>
+                            <span class="text-indigo-600">WhatsApp:</span>
+                            <p id="det-contrato-whatsapp-representante" class="font-medium"></p>
                         </div>
                     </div>
                     <!-- Plazos -->
@@ -1084,6 +1202,357 @@
             </div>
         </div>
 
+        <!-- Vista: Gestión de Plantillas / Configuración de Cartas -->
+        <div id="vista-plantillas" class="vista hidden">
+            <div class="max-w-3xl mx-auto">
+                <div class="mb-4">
+                    <button onclick="mostrarBandeja()" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        <span>Volver</span>
+                    </button>
+                </div>
+
+                <!-- Pestañas -->
+                <div class="flex gap-1 mb-6 border-b border-gray-200">
+                    <button id="tab-config" onclick="switchTabCartas('config')"
+                            class="px-5 py-2.5 text-sm font-medium border-b-2 border-blue-600 text-blue-600 -mb-px transition">
+                        Configuración
+                    </button>
+                    <button id="tab-plantillas" onclick="switchTabCartas('plantillas')"
+                            class="px-5 py-2.5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 -mb-px transition">
+                        Plantillas
+                    </button>
+                </div>
+
+                <!-- TAB: Configuración -->
+                <div id="panel-config">
+                    <!-- Membrete -->
+                    <div class="bg-white rounded-lg shadow p-6 mb-4">
+                        <h3 class="text-lg font-bold text-gray-800 mb-1">Membrete</h3>
+                        <p class="text-sm text-gray-500 mb-4">Archivo .docx con el encabezado/pie de página institucional. Se aplica a <strong>todas</strong> las cartas generadas.</p>
+                        <div id="membrete-estado" class="mb-4"></div>
+                        <div class="flex gap-3 items-center">
+                            <input type="file" id="membrete-archivo" accept=".docx" class="flex-1 text-sm border rounded-lg px-3 py-2 bg-white">
+                            <button onclick="subirMembrete()" class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap">
+                                Subir membrete
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Numeración -->
+                    <div class="bg-white rounded-lg shadow p-6 mb-4">
+                        <h3 class="text-lg font-bold text-gray-800 mb-1">Numeración de cartas</h3>
+                        <p class="text-sm text-gray-500 mb-4">Define el formato del número de carta. Ejemplo: <code class="bg-gray-100 px-1 rounded">Carta N° 000001-2026-NEMAEC/PRESIDENCIA</code></p>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Sufijo</label>
+                                    <input type="text" id="config-sufijo" placeholder="Ej: NEMAEC/PRESIDENCIA"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                                    <p class="text-xs text-gray-400 mt-1">Va después del año: …-2026-<em>SUFIJO</em></p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Dígitos del correlativo</label>
+                                    <select id="config-digitos" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                                        <option value="3">3 dígitos — 001</option>
+                                        <option value="4">4 dígitos — 0001</option>
+                                        <option value="5">5 dígitos — 00001</option>
+                                        <option value="6" selected>6 dígitos — 000001</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-lg border text-sm text-gray-600">
+                                Vista previa: <span id="config-preview" class="font-mono font-medium text-blue-700"></span>
+                            </div>
+                            <button onclick="guardarConfigNumeracion()"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                                Guardar configuración
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Firma -->
+                    <div class="bg-white rounded-lg shadow p-6 mb-4">
+                        <h3 class="text-lg font-bold text-gray-800 mb-1">Firma</h3>
+                        <p class="text-sm text-gray-500 mb-4">Datos del firmante que aparecerán al pie de cada carta generada.</p>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
+                                    <input type="text" id="config-firma-nombre" placeholder="Ej: MIGUEL IVAN ALARCÓN PARCO"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Cargo *</label>
+                                    <input type="text" id="config-firma-cargo" placeholder="Ej: PRESIDENTE NEMAEC"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Firma digital (imagen PNG/JPG, fondo transparente recomendado)</label>
+                                <div class="flex gap-3 items-center">
+                                    <input type="file" id="config-firma-imagen" accept=".png,.jpg,.jpeg"
+                                           class="flex-1 text-sm border rounded-lg px-3 py-2 bg-white">
+                                    <button onclick="subirFirmaImagen()" class="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 whitespace-nowrap">
+                                        Subir imagen
+                                    </button>
+                                </div>
+                                <div id="firma-imagen-estado" class="mt-2"></div>
+                            </div>
+                            <button onclick="guardarConfigFirma()"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                                Guardar firma
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Plantillas -->
+                <div id="panel-plantillas" class="hidden">
+                    <div class="bg-white rounded-lg shadow p-6 mb-4">
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">Plantillas de Carta</h3>
+                        <p class="text-sm text-gray-500 mb-6">Archivos .docx que la IA usa como guía de estructura al generar cartas.</p>
+
+                        <div class="p-4 bg-indigo-50 rounded-lg border border-indigo-200 mb-6">
+                            <h4 class="font-medium text-indigo-800 mb-3">Subir nueva plantilla</h4>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                                    <input type="text" id="plantilla-nombre" placeholder="Ej: Carta Estándar 2026"
+                                           class="w-full border rounded-lg px-3 py-2 bg-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                                    <input type="text" id="plantilla-descripcion" placeholder="Ej: CONVENIO N°005-2025-FONCODES"
+                                           class="w-full border rounded-lg px-3 py-2 bg-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Archivo .docx *</label>
+                                    <input type="file" id="plantilla-archivo" accept=".docx,.doc"
+                                           class="w-full border rounded-lg px-3 py-2 bg-white">
+                                </div>
+                                <button onclick="subirPlantilla()"
+                                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition">
+                                    Subir Plantilla
+                                </button>
+                            </div>
+                        </div>
+
+                        <h4 class="font-medium text-gray-700 mb-3">Plantillas disponibles</h4>
+                        <div id="lista-plantillas" class="space-y-3">
+                            <p class="text-gray-400 text-sm">Cargando...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vista: Creador de Carta con IA -->
+        <div id="vista-creador-carta" class="vista hidden">
+            <div class="max-w-4xl mx-auto">
+                <div class="mb-4">
+                    <button onclick="mostrarBandeja()" class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        <span>Volver</span>
+                    </button>
+                </div>
+
+                <!-- Panel izquierdo: configuración -->
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                    <div class="lg:col-span-2 space-y-4">
+
+                        <!-- Contrato -->
+                        <div class="bg-white rounded-lg shadow p-5">
+                            <h3 class="font-bold text-gray-800 mb-3">1. Contrato</h3>
+                            <div class="space-y-3">
+                                <!-- Buscador de contrato -->
+                                <div id="carta-buscador-contrato">
+                                    <label class="block text-sm text-gray-600 mb-1">Buscar contrato</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="carta-buscar-input"
+                                               placeholder="N° contrato o proveedor..."
+                                               oninput="debounceBuscarContratos()"
+                                               onfocus="buscarContratosParaCarta()"
+                                               autocomplete="off"
+                                               class="flex-1 border rounded-lg px-3 py-2 text-sm">
+                                    </div>
+                                    <div id="carta-buscar-resultados" class="mt-2 space-y-1 max-h-48 overflow-y-auto hidden"></div>
+                                </div>
+                                <!-- Contrato seleccionado -->
+                                <div>
+                                    <div id="carta-sin-contrato" class="p-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center text-gray-400 text-xs">
+                                        Ningún contrato seleccionado
+                                    </div>
+                                    <div id="carta-con-contrato" class="hidden">
+                                        <div class="p-3 bg-orange-50 border border-orange-200 rounded-lg mb-2">
+                                            <p id="carta-contrato-nombre" class="font-medium text-orange-800 text-sm">—</p>
+                                            <p id="carta-contrato-item" class="text-xs text-gray-500 mt-1">—</p>
+                                        </div>
+                                        <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                            <p class="text-xs text-indigo-600 font-medium mb-1">Destinatario</p>
+                                            <p id="carta-destinatario-nombre" class="font-medium text-sm">—</p>
+                                            <p id="carta-destinatario-cargo" class="text-xs text-gray-500">—</p>
+                                            <p id="carta-destinatario-institucion" class="text-xs text-gray-500">—</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Plantilla -->
+                        <div class="bg-white rounded-lg shadow p-5">
+                            <h3 class="font-bold text-gray-800 mb-3">2. Plantilla</h3>
+                            <div class="flex gap-2 items-center">
+                                <select id="carta-plantilla-id" onchange="toggleVerPlantilla()" class="flex-1 border rounded-lg px-3 py-2 bg-white text-sm">
+                                    <option value="">Sin plantilla (usar estructura estándar)</option>
+                                </select>
+                                <a id="btn-ver-plantilla" href="#" target="_blank"
+                                   class="hidden px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 whitespace-nowrap">
+                                    Ver
+                                </a>
+                                <button onclick="toggleFormNuevaPlantilla()"
+                                        class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-lg border whitespace-nowrap">
+                                    + Nueva
+                                </button>
+                            </div>
+                            <!-- Mini-formulario subir plantilla -->
+                            <div id="form-nueva-plantilla" class="hidden mt-3 p-3 bg-gray-50 rounded-lg border space-y-2">
+                                <input id="carta-plantilla-nombre" type="text" placeholder="Nombre de la plantilla"
+                                       class="w-full border rounded px-3 py-1.5 text-sm" />
+                                <div class="flex gap-2 items-center">
+                                    <input id="carta-plantilla-archivo" type="file" accept=".docx"
+                                           class="flex-1 text-xs text-gray-600" />
+                                    <button onclick="subirNuevaPlantillaCarta()"
+                                            class="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700 whitespace-nowrap">
+                                        Subir
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Contenido -->
+                        <div class="bg-white rounded-lg shadow p-5">
+                            <h3 class="font-bold text-gray-800 mb-3">3. Contenido</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Asunto *</label>
+                                    <input type="text" id="carta-asunto" placeholder="Ej: ACTAS DE TRANSFERENCIA DE BIENES"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Referencias</label>
+                                    <textarea id="carta-referencias" rows="3" placeholder="a) Convenio N°005-2025-FONCODES&#10;b) Carta N°000123-2026-NEMAEC/PRESIDENCIA"
+                                              class="w-full border rounded-lg px-3 py-2 text-sm"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Instrucciones para la IA</label>
+                                    <textarea id="carta-instrucciones" rows="2" placeholder="Ej: Mencionar que se adjuntan 5 actas firmadas, incluir tabla de resumen..."
+                                              class="w-full border rounded-lg px-3 py-2 text-sm"></textarea>
+                                </div>
+                                <button onclick="generarCartaIA()"
+                                        id="btn-generar-carta"
+                                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    Generar con IA
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel derecho: previsualización y edición -->
+                    <div class="lg:col-span-3">
+                        <div class="bg-white rounded-lg shadow p-5">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-bold text-gray-800">Vista previa de la carta</h3>
+                                <div id="btn-exportar-carta" class="hidden flex gap-2">
+                                    <button onclick="guardarCarta()"
+                                            id="btn-guardar-carta"
+                                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                                        </svg>
+                                        Guardar carta
+                                    </button>
+                                    <button onclick="exportarCartaDocx()"
+                                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                        </svg>
+                                        Descargar .docx
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Estado vacío -->
+                            <div id="carta-vacia" class="text-center py-16 text-gray-400">
+                                <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                <p>Completa los datos y haz clic en "Generar con IA"</p>
+                            </div>
+
+                            <!-- Carta generada (editable) -->
+                            <div id="carta-generada" class="hidden space-y-4">
+                                <!-- Encabezado (solo visualización) -->
+                                <div class="text-center border-b pb-3">
+                                    <p class="font-bold text-sm">NÚCLEO EJECUTOR PARA EL MANTENIMIENTO, ACONDICIONAMIENTO Y EQUIPAMIENTO DE COMISARÍAS - NEMAEC</p>
+                                    <p id="carta-prev-convenio" class="text-xs text-gray-600"></p>
+                                </div>
+                                <!-- Fecha -->
+                                <div class="flex justify-end">
+                                    <input type="text" id="carta-edit-fecha" class="border rounded px-2 py-1 text-sm text-right w-64">
+                                </div>
+                                <!-- Número -->
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">N° de Carta</label>
+                                    <input type="text" id="carta-edit-numero" class="w-full border rounded px-2 py-1 text-sm font-semibold">
+                                </div>
+                                <!-- Destinatario -->
+                                <div class="space-y-1">
+                                    <label class="block text-xs text-gray-500">Destinatario</label>
+                                    <input type="text" id="carta-edit-dest-nombre" class="w-full border rounded px-2 py-1 text-sm font-bold uppercase">
+                                    <input type="text" id="carta-edit-dest-cargo" class="w-full border rounded px-2 py-1 text-sm">
+                                    <input type="text" id="carta-edit-dest-institucion" class="w-full border rounded px-2 py-1 text-sm uppercase">
+                                </div>
+                                <!-- Asunto -->
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">Asunto</label>
+                                    <input type="text" id="carta-edit-asunto" class="w-full border rounded px-2 py-1 text-sm font-bold uppercase">
+                                </div>
+                                <!-- Referencia -->
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">Referencia</label>
+                                    <textarea id="carta-edit-referencias" rows="2" class="w-full border rounded px-2 py-1 text-sm"></textarea>
+                                </div>
+                                <!-- Cuerpo -->
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">Cuerpo de la carta</label>
+                                    <textarea id="carta-edit-cuerpo" rows="10" class="w-full border rounded px-2 py-1 text-sm leading-relaxed"></textarea>
+                                </div>
+                                <!-- Cierre -->
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">Cierre</label>
+                                    <textarea id="carta-edit-cierre" rows="2" class="w-full border rounded px-2 py-1 text-sm"></textarea>
+                                </div>
+                                <!-- Firma (solo visualización) -->
+                                <div class="pt-4 border-t text-sm">
+                                    <p>Atentamente,</p>
+                                    <p class="mt-6">____________________________</p>
+                                    <p class="font-bold">MIGUEL IVAN ALARCÓN PARCO</p>
+                                    <p>PRESIDENTE NEMAEC</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Vista: Login -->
         <div id="vista-login" class="vista hidden">
             <div class="max-w-md mx-auto mt-10">
@@ -1124,6 +1593,151 @@
                 </div>
             </div>
         </div>
+
+        <!-- Vista: Seguimiento de Liquidación -->
+        <div id="vista-seguimiento" class="vista hidden">
+            <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-800 mb-1">
+                        SEGUIMIENTO AL PROCESO DE LIQUIDACIÓN
+                        <span class="text-sm font-normal text-gray-500 ml-2">— Mantenimiento y Acondicionamiento de Comisarías</span>
+                    </h2>
+                    <p id="seg-aviso-readonly" class="text-sm text-amber-600 hidden">
+                        Solo lectura — inicia sesión para editar
+                    </p>
+                </div>
+                <div class="flex gap-2 flex-shrink-0">
+                    <button onclick="copiarLinkSeguimiento()"
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        Copiar link
+                    </button>
+                    <a href="/api/seguimiento/exportar-excel" download
+                       class="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Descargar Excel
+                    </a>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg shadow">
+                <table id="tabla-seguimiento" class="text-xs border-collapse" style="min-width:1600px">
+                    <thead>
+                        <tr class="bg-blue-800 text-white text-center">
+                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[30px]">N°</th>
+                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[130px]">COMISARÍA PNP</th>
+                            <th colspan="2" class="border border-blue-700 px-2 py-1">AVANCE EJEC.</th>
+                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[80px]">FECHA FIN CONTRACTUAL</th>
+                            <!-- 1 -->
+                            <th colspan="3" class="border border-blue-700 px-2 py-1 bg-blue-700">1. ACTA DE CONFORMIDAD<br>DE EJECUCIÓN Y RECEPCIÓN FÍSICA</th>
+                            <!-- 2 -->
+                            <th colspan="3" class="border border-blue-700 px-2 py-1 bg-indigo-700">2. INF. MODIFICACIÓN<br>DE PARTIDAS (UGPE)</th>
+                            <!-- 3 -->
+                            <th colspan="4" class="border border-blue-700 px-2 py-1 bg-purple-700">3. INF. AMPLIACIÓN<br>DE PLAZO</th>
+                            <!-- 4 -->
+                            <th colspan="5" class="border border-blue-700 px-2 py-1 bg-teal-700">4. INF. CULMINACIÓN Y<br>ENTREGA DE OBRA (DOSSIER)</th>
+                            <!-- 5 -->
+                            <th colspan="3" class="border border-blue-700 px-2 py-1 bg-green-700">5. INF. LIQUIDACIÓN<br>(FINAL)</th>
+                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[100px]">OBSERVACIONES</th>
+                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[90px]">ACTUALIZADO</th>
+                        </tr>
+                        <tr class="bg-blue-700 text-white text-center text-[10px]">
+                            <th class="border border-blue-600 px-1 py-1">PROG.</th>
+                            <th class="border border-blue-600 px-1 py-1">FÍSICO</th>
+                            <!-- 1 -->
+                            <th class="border border-blue-600 px-1 py-1 min-w-[70px]">FECHA FIRMA ACTA</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADA Y APROBADA</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDA A UGPE</th>
+                            <!-- 2 -->
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO A UGPE</th>
+                            <!-- 3 -->
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">ADENDA FIRMADA</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO A UGPE</th>
+                            <!-- 4 -->
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO A UGPE</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO PARA PAGO</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[70px]">MONTO PAGADO (S/)</th>
+                            <!-- 5 -->
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
+                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO PARA PAGO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-seguimiento">
+                        <tr><td colspan="25" class="text-center py-6 text-gray-400">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Modal detalle celda seguimiento -->
+        <div id="modal-celda-detalle" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+                <div class="p-6 border-b">
+                    <h3 class="text-lg font-bold text-gray-800" id="modal-celda-titulo">Actualizar campo</h3>
+                    <p class="text-sm text-gray-500 mt-1" id="modal-celda-subtitulo"></p>
+                </div>
+                <div class="p-6 space-y-4">
+                    <!-- Sección SI/NO (campos booleanos) -->
+                    <div id="modal-siono-section">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nuevo valor</label>
+                        <div class="flex gap-3">
+                            <button onclick="seleccionarValorCelda('SI')" id="btn-celda-si"
+                                    class="flex-1 py-2 rounded-lg border-2 font-bold transition text-green-700 border-green-300 hover:bg-green-50">SI</button>
+                            <button onclick="seleccionarValorCelda('NO')" id="btn-celda-no"
+                                    class="flex-1 py-2 rounded-lg border-2 font-bold transition text-red-700 border-red-300 hover:bg-red-50">NO</button>
+                            <button onclick="seleccionarValorCelda('NA')" id="btn-celda-na"
+                                    class="flex-1 py-2 rounded-lg border-2 font-bold transition text-gray-500 border-gray-300 hover:bg-gray-50">N/A</button>
+                            <button onclick="seleccionarValorCelda('-')" id="btn-celda-dash"
+                                    class="flex-1 py-2 rounded-lg border-2 font-bold transition text-gray-400 border-gray-200 hover:bg-gray-50">—</button>
+                        </div>
+                    </div>
+                    <!-- Detalle opcional (visible si valor = SI) -->
+                    <div id="modal-celda-detalle-extra" class="hidden space-y-3 border-t pt-4">
+                        <p class="text-sm text-gray-600 font-medium">Detalle opcional (al pasar a SI)</p>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
+                            <textarea id="modal-celda-obs" rows="2" placeholder="Observaciones..."
+                                      class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Enlace a archivo (URL)</label>
+                            <input type="url" id="modal-celda-enlace" placeholder="https://..."
+                                   class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Subir archivo</label>
+                            <input type="file" id="modal-celda-archivo"
+                                   class="w-full border rounded-lg px-3 py-2 text-sm">
+                        </div>
+                    </div>
+                    <!-- Sección input genérico (texto / fecha / número) -->
+                    <div id="modal-input-section" class="hidden">
+                        <label id="modal-input-label" class="block text-sm font-medium text-gray-700 mb-1">Valor</label>
+                        <input id="modal-celda-input" type="text"
+                               class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="p-6 border-t flex gap-3 justify-end">
+                    <button onclick="cerrarModalCelda()" class="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 transition">Cancelar</button>
+                    <button onclick="guardarCelda()" id="btn-guardar-celda"
+                            class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition disabled:opacity-50">
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Toast para notificaciones -->
@@ -1133,7 +1747,7 @@
         </div>
     </div>
 
-    <script src="js/api.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/api.js?v=2"></script>
+    <script src="js/app.js?v=2"></script>
 </body>
 </html>

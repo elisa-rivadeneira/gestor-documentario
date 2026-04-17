@@ -3614,12 +3614,61 @@ function renderizarSeguimiento() {
     const tbody = document.getElementById('tbody-seguimiento');
     const editable = estaAutenticado();
     if (!seguimientoData.length) {
-        tbody.innerHTML = '<tr><td colspan="24" class="text-center py-6 text-gray-400">Sin datos</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="25" class="text-center py-10 text-gray-400">Sin datos registrados</td></tr>';
         return;
     }
 
-    // Campos SI/NO en el orden exacto de las columnas del header
-    // (acta_fecha_firma y dossier_monto_pagado van por separado)
+    // Totalizadores del resumen
+    const total = seguimientoData.length;
+    const si = campo => seguimientoData.filter(r => r[campo] === 'SI').length;
+    const resEl = document.getElementById('seg-resumen');
+    if (resEl) {
+        const aplica = campo => seguimientoData.filter(r => r[campo] === 'SI' || r[campo] === 'NO').length;
+        const cards = [
+            {
+                icon: '📋', iconBg: 'rgba(100,116,139,0.12)',
+                num: si('acta_remitida_ugpe'),
+                total: aplica('acta_remitida_ugpe'),
+                label: 'Actas de Conformidad<br>remitidas a UGPE'
+            },
+            {
+                icon: '📅', iconBg: 'rgba(100,116,139,0.12)',
+                num: si('amp_presentado_ne'),
+                total: aplica('amp_presentado_ne'),
+                label: 'Informes de Ampliación<br>de Plazo presentados'
+            },
+            {
+                icon: '✍️', iconBg: 'rgba(100,116,139,0.12)',
+                num: si('amp_adenda_firmada'),
+                total: aplica('amp_adenda_firmada'),
+                label: 'Adendas<br>firmadas'
+            },
+            {
+                icon: '📤', iconBg: 'rgba(100,116,139,0.12)',
+                num: si('mod_remitido_ugpe'),
+                total: aplica('mod_remitido_ugpe'),
+                label: 'Inf. Modificación de Partidas<br>remitidos a UGPE'
+            },
+            {
+                icon: '📦', iconBg: 'rgba(100,116,139,0.12)',
+                num: si('dossier_presentado_ne'),
+                total: aplica('dossier_presentado_ne'),
+                label: 'Informes de Dossier<br>presentados al NE'
+            },
+        ];
+        resEl.innerHTML = cards.map(c => `
+            <div class="seg-res-card">
+                <div class="seg-res-icon" style="background:${c.iconBg}">${c.icon}</div>
+                <div class="seg-res-body">
+                    <div>
+                        <span class="seg-res-num">${c.num}</span>
+                        <span class="seg-res-total">/ ${c.total}</span>
+                    </div>
+                    <div class="seg-res-label">${c.label}</div>
+                </div>
+            </div>`).join('');
+    }
+
     const camposSiNo = [
         'acta_revisada','acta_remitida_ugpe',
         'mod_presentado_ne','mod_revisado_aprobado','mod_remitido_ugpe',
@@ -3627,6 +3676,14 @@ function renderizarSeguimiento() {
         'dossier_presentado_ne','dossier_revisado_aprobado','dossier_remitido_ugpe','dossier_remitido_pago',
         'liq_presentado_ne','liq_revisado_aprobado','liq_remitido_pago',
     ];
+
+    const ICONOS = {
+        'SI':  '<span style="font-size:1rem">✓</span>',
+        'NO':  '<span style="font-size:0.85rem">✗</span>',
+        'NA':  '<span style="font-size:0.7rem;letter-spacing:-0.04em">N/A</span>',
+        '':    '<span style="font-size:1rem;opacity:0.3">·</span>',
+        '-':   '<span style="font-size:1rem;opacity:0.3">—</span>',
+    };
 
     function celdaSiNo(row, campo, editable) {
         const val = row[campo] || '';
@@ -3642,28 +3699,36 @@ function renderizarSeguimiento() {
             title = `${last.usuario} — ${new Date(last.fecha_actualizacion).toLocaleString('es-PE')}`;
             if (last.observacion) title += `: ${last.observacion}`;
         }
-        const base = `border border-gray-200 px-1 py-1 text-center`;
+        const icono = ICONOS[val] ?? val;
+        const base = 'border border-gray-200 px-1 py-1.5';
         if (editable) {
-            return `<td class="${cls} ${base} cursor-pointer" onclick="abrirModalCelda(${row.id},'${campo}','${val}','${row.comisaria.replace(/'/g,'\\\'')}')" title="${title}">${val}</td>`;
+            return `<td class="${cls} ${base}" onclick="abrirModalCelda(${row.id},'${campo}','${val}','${row.comisaria.replace(/'/g,'\\\'')}')" title="${title}">${icono}</td>`;
         }
-        return `<td class="${cls} ${base} celda-readonly" title="${title}">${val}</td>`;
+        return `<td class="${cls} ${base} celda-readonly" title="${title}">${icono}</td>`;
     }
 
     tbody.innerHTML = seguimientoData.map((row, idx) => {
-        const bg = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        const bg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
         const fechaFin = row.fecha_fin_contractual ? row.fecha_fin_contractual.substring(0,10) : '';
         const fechaFirma = row.acta_fecha_firma ? row.acta_fecha_firma.substring(0,10) : '';
         const updatedAt = row.updated_at ? new Date(row.updated_at).toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'}) : '';
-        const avanceProg = row.avance_programado != null ? Math.round(row.avance_programado * 100) + '%' : '';
-        const avanceFis = row.avance_fisico != null ? (row.avance_fisico * 100).toFixed(1) + '%' : '';
-        const monto = row.dossier_monto_pagado != null ? 'S/ ' + row.dossier_monto_pagado.toLocaleString('es-PE',{minimumFractionDigits:2}) : '';
+        const avanceProg = row.avance_programado != null ? Math.round(row.avance_programado * 100) + '%' : '—';
+        const avanceFisPct = row.avance_fisico != null ? Math.round(row.avance_fisico * 100) : null;
+        const avanceFisHtml = avanceFisPct != null
+            ? `<div class="seg-avance-wrap">
+                <div class="seg-avance-bg" style="width:${avanceFisPct}%;background:${avanceFisPct >= 100 ? '#16a34a' : avanceFisPct >= 60 ? '#2563eb' : '#d97706'}"></div>
+                <span class="seg-avance-text">${avanceFisPct}%</span>
+               </div>`
+            : '—';
+        const monto = row.dossier_monto_pagado != null
+            ? `<span class="font-semibold text-emerald-700">S/ ${row.dossier_monto_pagado.toLocaleString('es-PE',{minimumFractionDigits:2})}</span>`
+            : '';
 
-        // Construir celdas SI/NO en orden, insertando monto_pagado después de dossier_remitido_pago
         let celdasHtml = '';
         for (const campo of camposSiNo) {
             celdasHtml += celdaSiNo(row, campo, editable);
             if (campo === 'dossier_remitido_pago') {
-                celdasHtml += `<td class="border border-gray-200 px-1 py-1 text-right">${monto}</td>`;
+                celdasHtml += `<td class="border border-gray-200 px-2 py-1.5 text-right text-xs">${monto}</td>`;
             }
         }
 
@@ -3671,24 +3736,24 @@ function renderizarSeguimiento() {
             const val = row[campo] ?? '';
             const esc = String(val).replace(/'/g, "\\'");
             if (editable) {
-                return `<td class="border border-gray-200 px-1 py-1 cursor-pointer hover:bg-yellow-50 group relative ${extraCls}"
+                return `<td class="border border-gray-200 px-1 py-1.5 cursor-pointer hover:bg-amber-50 group relative ${extraCls}"
                             onclick="abrirModalCelda(${row.id},'${campo}','${esc}','${row.comisaria.replace(/'/g,"\\'")}')">
-                            ${display}<span class="absolute top-0.5 right-0.5 text-gray-300 group-hover:text-blue-400 text-[9px] leading-none">✎</span>
+                            ${display}<span class="absolute top-0.5 right-0.5 text-gray-300 group-hover:text-blue-400 text-[8px]">✎</span>
                         </td>`;
             }
-            return `<td class="border border-gray-200 px-1 py-1 ${extraCls}">${display}</td>`;
+            return `<td class="border border-gray-200 px-1 py-1.5 ${extraCls}">${display}</td>`;
         };
 
-        return `<tr class="${bg} text-xs">
-            <td class="border border-gray-200 px-1 py-1 text-center font-medium">${row.numero}</td>
-            <td class="border border-gray-200 px-2 py-1 font-medium">${row.comisaria}</td>
-            <td class="border border-gray-200 px-1 py-1 text-center">${avanceProg}</td>
-            ${tdEdit('avance_fisico', avanceFis, 'text-center')}
-            ${tdEdit('fecha_fin_contractual', fechaFin, 'text-center')}
-            <td class="border border-gray-200 px-1 py-1 text-center">${fechaFirma}</td>
+        return `<tr class="${bg} text-xs hover:brightness-95 transition-all">
+            <td class="border border-gray-200 px-1 py-1.5 text-center font-bold text-gray-500">${row.numero}</td>
+            <td class="border border-gray-200 px-2 py-1.5 font-semibold text-gray-800">${row.comisaria}</td>
+            <td class="border border-gray-200 px-1 py-1.5 text-center text-gray-500">${avanceProg}</td>
+            ${tdEdit('avance_fisico', avanceFisHtml, 'text-center')}
+            ${tdEdit('fecha_fin_contractual', fechaFin ? `<span class="font-medium">${fechaFin}</span>` : '', 'text-center')}
+            <td class="border border-gray-200 px-1 py-1.5 text-center text-gray-600">${fechaFirma}</td>
             ${celdasHtml}
-            ${tdEdit('observaciones', row.observaciones || '', 'text-left text-gray-600')}
-            <td class="border border-gray-200 px-1 py-1 text-center text-gray-400 text-[10px]">${updatedAt}</td>
+            ${tdEdit('observaciones', row.observaciones ? `<span class="text-gray-600">${row.observaciones}</span>` : '', 'text-left')}
+            <td class="border border-gray-200 px-1 py-1.5 text-center text-gray-400 text-[10px] leading-tight">${updatedAt}</td>
         </tr>`;
     }).join('');
 }
@@ -3828,3 +3893,155 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+
+/* ============================================================
+   TEMAS DE COLOR — SEGUIMIENTO
+   Fondos pasteles suaves, colores fuertes solo en líneas/acento
+   ============================================================ */
+const SEG_TEMAS = {
+    verde: {
+        '--s-bg':          '#F0FDF4',
+        '--s-accent':      '#166534',
+        '--s-accent2':     '#C8A200',
+        '--s-text':        '#052E10',
+        '--s-sub':         '#166534',
+        '--s-tag-bg':      'rgba(22,101,52,0.09)',
+        '--s-tag-color':   '#14532D',
+        '--s-tag-border':  'rgba(22,101,52,0.22)',
+        '--s-stat-border': 'rgba(22,101,52,0.18)',
+        '--s-stat-divider':'rgba(22,101,52,0.12)',
+        '--s-stat-num':    '#052E10',
+        '--s-stat-label':  '#16A34A',
+        '--s-btn-color':   '#14532D',
+        '--s-btn-border':  'rgba(22,101,52,0.3)',
+        '--s-th-bg':       '#DCFCE7',
+        '--s-th-color':    '#14532D',
+        '--s-th-border':   '#A7F3D0',
+        '--s-th2-bg':      '#BBF7D0',
+        '--s-th2-color':   '#166534',
+    },
+    azul: {
+        '--s-bg':          '#EFF6FF',
+        '--s-accent':      '#1D4ED8',
+        '--s-accent2':     '#0284C7',
+        '--s-text':        '#1E3A8A',
+        '--s-sub':         '#2563EB',
+        '--s-tag-bg':      'rgba(29,78,216,0.08)',
+        '--s-tag-color':   '#1E3A8A',
+        '--s-tag-border':  'rgba(29,78,216,0.2)',
+        '--s-stat-border': 'rgba(29,78,216,0.18)',
+        '--s-stat-divider':'rgba(29,78,216,0.1)',
+        '--s-stat-num':    '#1E3A8A',
+        '--s-stat-label':  '#3B82F6',
+        '--s-btn-color':   '#1E3A8A',
+        '--s-btn-border':  'rgba(29,78,216,0.28)',
+        '--s-th-bg':       '#DBEAFE',
+        '--s-th-color':    '#1E3A8A',
+        '--s-th-border':   '#BFDBFE',
+        '--s-th2-bg':      '#BFDBFE',
+        '--s-th2-color':   '#1D4ED8',
+    },
+    gris: {
+        '--s-bg':          '#F8FAFC',
+        '--s-accent':      '#1E293B',
+        '--s-accent2':     '#475569',
+        '--s-text':        '#0F172A',
+        '--s-sub':         '#475569',
+        '--s-tag-bg':      'rgba(15,23,42,0.07)',
+        '--s-tag-color':   '#1E293B',
+        '--s-tag-border':  'rgba(15,23,42,0.18)',
+        '--s-stat-border': 'rgba(15,23,42,0.14)',
+        '--s-stat-divider':'rgba(15,23,42,0.08)',
+        '--s-stat-num':    '#0F172A',
+        '--s-stat-label':  '#64748B',
+        '--s-btn-color':   '#1E293B',
+        '--s-btn-border':  'rgba(15,23,42,0.22)',
+        '--s-th-bg':       '#F1F5F9',
+        '--s-th-color':    '#1E293B',
+        '--s-th-border':   '#CBD5E1',
+        '--s-th2-bg':      '#E2E8F0',
+        '--s-th2-color':   '#334155',
+    },
+    amber: {
+        '--s-bg':          '#FFFBEB',
+        '--s-accent':      '#B45309',
+        '--s-accent2':     '#D97706',
+        '--s-text':        '#451A03',
+        '--s-sub':         '#92400E',
+        '--s-tag-bg':      'rgba(180,83,9,0.08)',
+        '--s-tag-color':   '#78350F',
+        '--s-tag-border':  'rgba(180,83,9,0.22)',
+        '--s-stat-border': 'rgba(180,83,9,0.18)',
+        '--s-stat-divider':'rgba(180,83,9,0.1)',
+        '--s-stat-num':    '#451A03',
+        '--s-stat-label':  '#D97706',
+        '--s-btn-color':   '#78350F',
+        '--s-btn-border':  'rgba(180,83,9,0.28)',
+        '--s-th-bg':       '#FEF3C7',
+        '--s-th-color':    '#78350F',
+        '--s-th-border':   '#FDE68A',
+        '--s-th2-bg':      '#FDE68A',
+        '--s-th2-color':   '#92400E',
+    },
+    teal: {
+        '--s-bg':          '#F0FDFA',
+        '--s-accent':      '#0F766E',
+        '--s-accent2':     '#0891B2',
+        '--s-text':        '#134E4A',
+        '--s-sub':         '#0D9488',
+        '--s-tag-bg':      'rgba(15,118,110,0.09)',
+        '--s-tag-color':   '#134E4A',
+        '--s-tag-border':  'rgba(15,118,110,0.22)',
+        '--s-stat-border': 'rgba(15,118,110,0.18)',
+        '--s-stat-divider':'rgba(15,118,110,0.1)',
+        '--s-stat-num':    '#134E4A',
+        '--s-stat-label':  '#0D9488',
+        '--s-btn-color':   '#134E4A',
+        '--s-btn-border':  'rgba(15,118,110,0.28)',
+        '--s-th-bg':       '#CCFBF1',
+        '--s-th-color':    '#134E4A',
+        '--s-th-border':   '#99F6E4',
+        '--s-th2-bg':      '#99F6E4',
+        '--s-th2-color':   '#0F766E',
+    },
+    apple: {
+        '--s-bg':          'rgba(236,253,245,0.85)',
+        '--s-accent':      '#059669',
+        '--s-accent2':     '#C8A200',
+        '--s-text':        '#064E3B',
+        '--s-sub':         '#10B981',
+        '--s-tag-bg':      'rgba(5,150,105,0.07)',
+        '--s-tag-color':   '#065F46',
+        '--s-tag-border':  'rgba(5,150,105,0.16)',
+        '--s-stat-border': 'rgba(255,255,255,0.7)',
+        '--s-stat-divider':'rgba(5,150,105,0.09)',
+        '--s-stat-num':    '#064E3B',
+        '--s-stat-label':  '#10B981',
+        '--s-btn-color':   '#065F46',
+        '--s-btn-border':  'rgba(5,150,105,0.2)',
+        '--s-th-bg':       'rgba(220,252,231,0.55)',
+        '--s-th-color':    '#065F46',
+        '--s-th-border':   'rgba(167,243,208,0.5)',
+        '--s-th2-bg':      'rgba(187,247,208,0.45)',
+        '--s-th2-color':   '#059669',
+    },
+};
+
+function aplicarTemaSeg(nombre) {
+    const vista = document.getElementById('vista-seguimiento');
+    const vars = SEG_TEMAS[nombre];
+    if (!vista || !vars) return;
+    vista.dataset.tema = nombre;
+    Object.entries(vars).forEach(([k, v]) => vista.style.setProperty(k, v));
+    localStorage.setItem('seg-tema', nombre);
+    document.querySelectorAll('.seg-tdot').forEach(btn => {
+        btn.classList.toggle('seg-tdot-active', btn.dataset.t === nombre);
+    });
+}
+
+function iniciarTemaSeg() {
+    const guardado = localStorage.getItem('seg-tema') || 'gris';
+    aplicarTemaSeg(guardado);
+}
+
+document.addEventListener('DOMContentLoaded', iniciarTemaSeg);

@@ -7,16 +7,20 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <link rel="stylesheet" href="css/styles.css?v=3">
+    <link rel="stylesheet" href="css/styles.css?v=11">
 </head>
 <body class="bg-gray-100 min-h-screen">
     <!-- Header -->
-    <header class="bg-blue-800 text-white shadow-lg">
-        <div class="container mx-auto px-4 py-4">
+    <header style="background:#0A2E10;border-bottom:3px solid #C8A200" class="text-white shadow-lg">
+        <div class="container mx-auto px-4 py-3">
             <div class="flex items-center justify-between">
-                <h1 class="text-2xl font-bold cursor-pointer" onclick="mostrarBandeja()">
-                    NEMAEC - GESTOR DOCUMENTARIO
-                </h1>
+                <div class="flex items-center gap-3 cursor-pointer" onclick="mostrarBandeja()">
+                    <img src="/favicon.ico" alt="NEMAEC" style="width:38px;height:38px;background:white;border-radius:6px;padding:3px;object-fit:contain">
+                    <div>
+                        <h1 class="text-lg font-black leading-tight tracking-wide">NEMAEC</h1>
+                        <p class="text-[10px] text-blue-200 leading-none tracking-widest uppercase">Gestor Documentario</p>
+                    </div>
+                </div>
                 <div class="flex items-center gap-4">
                     <!-- Botón Nuevo Documento (solo admin) -->
                     <button id="btn-nuevo-header" onclick="mostrarFormularioNuevo()"
@@ -1596,85 +1600,80 @@
 
         <!-- Vista: Seguimiento de Liquidación -->
         <div id="vista-seguimiento" class="vista hidden">
-            <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h2 class="text-lg font-bold text-gray-800 mb-1">
-                        SEGUIMIENTO AL PROCESO DE LIQUIDACIÓN
-                        <span class="text-sm font-normal text-gray-500 ml-2">— Mantenimiento y Acondicionamiento de Comisarías</span>
-                    </h2>
-                    <p id="seg-aviso-readonly" class="text-sm text-amber-600 hidden">
-                        Solo lectura — inicia sesión para editar
-                    </p>
-                </div>
-                <div class="flex gap-2 flex-shrink-0">
-                    <button onclick="copiarLinkSeguimiento()"
-                            class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm transition">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                        </svg>
-                        Copiar link
-                    </button>
-                    <a href="/api/seguimiento/exportar-excel" download
-                       class="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                        </svg>
-                        Descargar Excel
-                    </a>
-                </div>
+
+            <!-- Cabecera simple -->
+            <div class="seg-banner">
+                <h2 class="seg-banner-h2">Seguimiento al Proceso de Liquidación</h2>
             </div>
 
-            <div class="overflow-x-auto rounded-lg shadow">
-                <table id="tabla-seguimiento" class="text-xs border-collapse" style="min-width:1600px">
+            <!-- Resumen de totales -->
+            <div id="seg-resumen" class="seg-resumen"></div>
+
+            <!-- Aviso solo lectura -->
+            <p id="seg-aviso-readonly" class="seg-aviso hidden">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+                Vista de solo lectura — inicia sesión para editar los datos
+            </p>
+
+            <!-- Tabla -->
+            <div class="overflow-x-auto seg-table-wrap">
+                <table id="tabla-seguimiento" class="border-collapse w-full" style="min-width:1640px">
                     <thead>
-                        <tr class="bg-blue-800 text-white text-center">
-                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[30px]">N°</th>
-                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[130px]">COMISARÍA PNP</th>
-                            <th colspan="2" class="border border-blue-700 px-2 py-1">AVANCE EJEC.</th>
-                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[80px]">FECHA FIN CONTRACTUAL</th>
-                            <!-- 1 -->
-                            <th colspan="3" class="border border-blue-700 px-2 py-1 bg-blue-700">1. ACTA DE CONFORMIDAD<br>DE EJECUCIÓN Y RECEPCIÓN FÍSICA</th>
-                            <!-- 2 -->
-                            <th colspan="3" class="border border-blue-700 px-2 py-1 bg-indigo-700">2. INF. MODIFICACIÓN<br>DE PARTIDAS (UGPE)</th>
-                            <!-- 3 -->
-                            <th colspan="4" class="border border-blue-700 px-2 py-1 bg-purple-700">3. INF. AMPLIACIÓN<br>DE PLAZO</th>
-                            <!-- 4 -->
-                            <th colspan="5" class="border border-blue-700 px-2 py-1 bg-teal-700">4. INF. CULMINACIÓN Y<br>ENTREGA DE OBRA (DOSSIER)</th>
-                            <!-- 5 -->
-                            <th colspan="3" class="border border-blue-700 px-2 py-1 bg-green-700">5. INF. LIQUIDACIÓN<br>(FINAL)</th>
-                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[100px]">OBSERVACIONES</th>
-                            <th rowspan="2" class="border border-blue-700 px-2 py-2 min-w-[90px]">ACTUALIZADO</th>
+                        <tr class="text-center">
+                            <th rowspan="2" class="seg-th-main px-2 py-2 min-w-[32px]">N°</th>
+                            <th rowspan="2" class="seg-th-main px-2 py-2 min-w-[145px] text-left">COMISARÍA PNP</th>
+                            <th colspan="2" class="seg-th-main px-2 py-1">AVANCE</th>
+                            <th rowspan="2" class="seg-th-main px-2 py-2 min-w-[78px]">FECHA FIN<br>CONTRACTUAL</th>
+                            <th colspan="3" class="seg-th-acta px-3 py-2 text-left">
+                                <span class="seg-badge seg-badge-1">1</span>ACTA DE CONFORMIDAD
+                                <div style="font-size:0.58rem;opacity:0.65;font-weight:400;margin-top:1px">Ejecución y recepción física</div>
+                            </th>
+                            <th colspan="3" class="seg-th-mod px-3 py-2 text-left">
+                                <span class="seg-badge seg-badge-2">2</span>INF. MODIFICACIÓN DE PARTIDAS
+                                <div style="font-size:0.58rem;opacity:0.65;font-weight:400;margin-top:1px">UGPE</div>
+                            </th>
+                            <th colspan="4" class="seg-th-amp px-3 py-2 text-left">
+                                <span class="seg-badge seg-badge-3">3</span>INF. AMPLIACIÓN DE PLAZO
+                                <div style="font-size:0.58rem;opacity:0.65;font-weight:400;margin-top:1px">&nbsp;</div>
+                            </th>
+                            <th colspan="5" class="seg-th-dossier px-3 py-2 text-left">
+                                <span class="seg-badge seg-badge-4">4</span>INF. CULMINACIÓN Y ENTREGA DE OBRA
+                                <div style="font-size:0.58rem;opacity:0.65;font-weight:400;margin-top:1px">Dossier</div>
+                            </th>
+                            <th colspan="3" class="seg-th-liq px-3 py-2 text-left">
+                                <span class="seg-badge seg-badge-5">5</span>INF. LIQUIDACIÓN FINAL
+                                <div style="font-size:0.58rem;opacity:0.65;font-weight:400;margin-top:1px">&nbsp;</div>
+                            </th>
+                            <th rowspan="2" class="seg-th-main px-2 py-2 min-w-[110px]">OBSERVACIONES</th>
+                            <th rowspan="2" class="seg-th-main px-2 py-2 min-w-[80px]">ACTUALIZADO</th>
                         </tr>
-                        <tr class="bg-blue-700 text-white text-center text-[10px]">
-                            <th class="border border-blue-600 px-1 py-1">PROG.</th>
-                            <th class="border border-blue-600 px-1 py-1">FÍSICO</th>
-                            <!-- 1 -->
-                            <th class="border border-blue-600 px-1 py-1 min-w-[70px]">FECHA FIRMA ACTA</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADA Y APROBADA</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDA A UGPE</th>
-                            <!-- 2 -->
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO A UGPE</th>
-                            <!-- 3 -->
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">ADENDA FIRMADA</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO A UGPE</th>
-                            <!-- 4 -->
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO A UGPE</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO PARA PAGO</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[70px]">MONTO PAGADO (S/)</th>
-                            <!-- 5 -->
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">PRESENTADO AL NE</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REVISADO Y APROBADO</th>
-                            <th class="border border-blue-600 px-1 py-1 min-w-[55px]">REMITIDO PARA PAGO</th>
+                        <tr class="text-center">
+                            <th class="seg-th-main min-w-[46px]">PROG.</th>
+                            <th class="seg-th-main min-w-[52px]">FÍSICO</th>
+                            <th class="seg-th-acta min-w-[72px]">FECHA<br>FIRMA ACTA</th>
+                            <th class="seg-th-acta min-w-[54px]">REVISADA Y<br>APROBADA</th>
+                            <th class="seg-th-acta min-w-[54px]">REMITIDA<br>A UGPE</th>
+                            <th class="seg-th-mod min-w-[54px]">PRESENTADO<br>AL NE</th>
+                            <th class="seg-th-mod min-w-[54px]">REVISADO Y<br>APROBADO</th>
+                            <th class="seg-th-mod min-w-[54px]">REMITIDO<br>A UGPE</th>
+                            <th class="seg-th-amp min-w-[54px]">PRESENTADO<br>AL NE</th>
+                            <th class="seg-th-amp min-w-[54px]">REVISADO Y<br>APROBADO</th>
+                            <th class="seg-th-amp min-w-[54px]">ADENDA<br>FIRMADA</th>
+                            <th class="seg-th-amp min-w-[54px]">REMITIDO<br>A UGPE</th>
+                            <th class="seg-th-dossier min-w-[54px]">PRESENTADO<br>AL NE</th>
+                            <th class="seg-th-dossier min-w-[54px]">REVISADO Y<br>APROBADO</th>
+                            <th class="seg-th-dossier min-w-[54px]">REMITIDO<br>A UGPE</th>
+                            <th class="seg-th-dossier min-w-[54px]">REMITIDO<br>PARA PAGO</th>
+                            <th class="seg-th-dossier min-w-[74px]">MONTO<br>PAGADO (S/)</th>
+                            <th class="seg-th-liq min-w-[54px]">PRESENTADO<br>AL NE</th>
+                            <th class="seg-th-liq min-w-[54px]">REVISADO Y<br>APROBADO</th>
+                            <th class="seg-th-liq min-w-[54px]">REMITIDO<br>PARA PAGO</th>
                         </tr>
                     </thead>
                     <tbody id="tbody-seguimiento">
-                        <tr><td colspan="25" class="text-center py-6 text-gray-400">Cargando...</td></tr>
+                        <tr><td colspan="25" class="text-center py-8 text-gray-400">Cargando...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1748,6 +1747,6 @@
     </div>
 
     <script src="js/api.js?v=3"></script>
-    <script src="js/app.js?v=3"></script>
+    <script src="js/app.js?v=13"></script>
 </body>
 </html>

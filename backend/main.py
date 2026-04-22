@@ -2240,7 +2240,11 @@ def _align(horizontal="center", wrap=True):
 
 @app.get("/api/seguimiento/exportar-excel")
 def exportar_seguimiento_excel(db: Session = Depends(get_db)):
-    """Exporta la tabla de seguimiento como Excel con formato igual al original."""
+    """Exporta la tabla de seguimiento como Excel con formato similar al original.
+    Valores SI/NO → 1/0 con formato condicional verde/rojo."""
+    from openpyxl.styles.differential import DifferentialStyle
+    from openpyxl.formatting.rule import Rule
+
     filas = db.query(SeguimientoComisaria).order_by(SeguimientoComisaria.numero).all()
 
     wb = openpyxl.Workbook()
@@ -2248,21 +2252,16 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
     ws.title = "Seguimiento Liquidación"
     ws.sheet_view.showGridLines = False
 
-    # Paleta de colores (BGR hex para openpyxl)
-    C_TITLE   = "1F3864"   # Azul muy oscuro
-    C_GRP1    = "1F497D"   # Azul oscuro  - Acta
-    C_GRP2    = "243F60"   # Azul indigo  - Mod
-    C_GRP3    = "3A3680"   # Purpura      - Amp
-    C_GRP4    = "215868"   # Teal         - Dossier
-    C_GRP5    = "215832"   # Verde        - Liq
+    C_TITLE   = "1F3864"
+    C_GRP1    = "1F497D"
+    C_GRP2    = "243F60"
+    C_GRP3    = "3A3680"
+    C_GRP4    = "215868"
+    C_GRP5    = "215832"
     C_HDR_TXT = "FFFFFF"
-    C_SI      = "C6EFCE"   # Verde claro
-    C_SI_TXT  = "276221"
-    C_NO      = "FFC7CE"   # Rojo claro
-    C_NO_TXT  = "9C0006"
     C_NA      = "EDEDED"
     C_NA_TXT  = "7F7F7F"
-    C_ALT     = "F2F2F2"   # Fila par
+    C_ALT     = "F2F2F2"
 
     brd = _border()
 
@@ -2292,42 +2291,41 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
     for start, end, label, color in grupos:
         if start != end:
             ws.merge_cells(f"{start}:{end}")
-        cell = ws[start]
-        cell.value = label
-        cell.fill = _color(color or C_TITLE)
-        cell.font = _font(bold=True, color=C_HDR_TXT, size=8)
-        cell.alignment = _align("center")
-        cell.border = brd
+        cel = ws[start]
+        cel.value = label
+        cel.fill = _color(color or C_TITLE)
+        cel.font = _font(bold=True, color=C_HDR_TXT, size=8)
+        cel.alignment = _align("center")
+        cel.border = brd
     ws.row_dimensions[2].height = 30
 
     # ── FILA 3: Sub-encabezados ─────────────────────────────────────
-    # Columnas C y D (avance)
     ws.merge_cells("A2:A3")
     ws.merge_cells("B2:B3")
     ws.merge_cells("E2:E3")
     ws.merge_cells("X2:X3")
 
     sub_hdrs = [
-        ("C3", "PROGRAMADO",    None),
-        ("D3", "FÍSICO",        None),
-        ("F3", "FECHA FIRMA\nACTA",         C_GRP1),
-        ("G3", "REVISADA Y\nAPROBADA",      C_GRP1),
-        ("H3", "REMITIDA\nA UGPE",          C_GRP1),
-        ("I3", "PRESENTADO\nAL NE",         C_GRP2),
-        ("J3", "REVISADO Y\nAPROBADO",      C_GRP2),
-        ("K3", "REMITIDO\nA UGPE",          C_GRP2),
-        ("L3", "PRESENTADO\nAL NE",         C_GRP3),
-        ("M3", "REVISADO Y\nAPROBADO",      C_GRP3),
-        ("N3", "ADENDA\nFIRMADA",           C_GRP3),
-        ("O3", "REMITIDO\nA UGPE",          C_GRP3),
-        ("P3", "PRESENTADO\nAL NE",         C_GRP4),
-        ("Q3", "REVISADO Y\nAPROBADO",      C_GRP4),
-        ("R3", "REMITIDO\nA UGPE",          C_GRP4),
-        ("S3", "REMITIDO\nPARA PAGO",       C_GRP4),
-        ("T3", "MONTO\nPAGADO (S/)",        C_GRP4),
-        ("U3", "PRESENTADO\nAL NE",         C_GRP5),
-        ("V3", "REVISADO Y\nAPROBADO",      C_GRP5),
-        ("W3", "REMITIDO\nPARA PAGO",       C_GRP5),
+        ("C3", "PROGRAMADO",         None),
+        ("D3", "FÍSICO",             None),
+        ("F3", "FECHA FIRMA\nACTA",  C_GRP1),
+        ("G3", "REVISADA Y\nAPROBADA",   C_GRP1),
+        ("H3", "REMITIDA\nA UGPE",       C_GRP1),
+        ("I3", "PRESENTADO\nAL NE",      C_GRP2),
+        ("J3", "REVISADO Y\nAPROBADO",   C_GRP2),
+        ("K3", "REMITIDO\nA UGPE",       C_GRP2),
+        ("L3", "PRESENTADO\nAL NE",      C_GRP3),
+        ("M3", "REVISADO Y\nAPROBADO",   C_GRP3),
+        ("N3", "ADENDA\nFIRMADA",        C_GRP3),
+        ("O3", "REMITIDO\nA UGPE",       C_GRP3),
+        ("P3", "PRESENTADO\nAL NE",      C_GRP4),
+        ("Q3", "REVISADO Y\nAPROBADO",   C_GRP4),
+        ("R3", "REMITIDO\nA UGPE",       C_GRP4),
+        ("S3", "REMITIDO\nPARA PAGO",    C_GRP4),
+        ("T3", "MONTO\nPAGADO (S/)",     C_GRP4),
+        ("U3", "PRESENTADO\nAL NE",      C_GRP5),
+        ("V3", "REVISADO Y\nAPROBADO",   C_GRP5),
+        ("W3", "REMITIDO\nPARA PAGO",    C_GRP5),
     ]
     for cell_ref, label, color in sub_hdrs:
         c = ws[cell_ref]
@@ -2346,54 +2344,48 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
         'dossier_presentado_ne','dossier_revisado_aprobado','dossier_remitido_ugpe','dossier_remitido_pago',
         'liq_presentado_ne','liq_revisado_aprobado','liq_remitido_pago',
     ]
-    # Mapa campo → columna (G..W, omitiendo T=monto y F=fecha_firma)
+    # G(7)..S(19) + saltar T(20)=monto → U(21)..W(23)
     col_map = {campo: idx for idx, campo in enumerate(campos_siono, start=7)}
-    # Ajuste: insertar T (col 20) para monto después de dossier_remitido_pago (col 19)
     for campo, col in list(col_map.items()):
-        if col >= 20:  # U,V,W → desplazar +1 por la col T del monto
+        if col >= 20:
             col_map[campo] = col + 1
 
-    for r_idx, row in enumerate(filas, start=4):
-        excel_row = r_idx
+    data_first_row = 4
+    for r_idx, row in enumerate(filas, start=data_first_row):
         bg = None if r_idx % 2 == 0 else C_ALT
 
-        def cell(col_num):
-            return ws.cell(row=excel_row, column=col_num)
+        def cell(col_num, r=r_idx):
+            return ws.cell(row=r, column=col_num)
 
-        # N°
         cell(1).value = row.numero
         cell(1).font = _font(bold=True)
-        # Comisaría
         cell(2).value = row.comisaria
         cell(2).font = _font(bold=False)
         cell(2).alignment = _align("left", wrap=False)
-        # Avance programado / físico
         cell(3).value = row.avance_programado
         cell(3).number_format = "0%"
         cell(4).value = row.avance_fisico
         cell(4).number_format = "0.00%"
-        # Fecha fin contractual
         if row.fecha_fin_contractual:
             cell(5).value = row.fecha_fin_contractual
             cell(5).number_format = "DD/MM/YYYY"
-        # Fecha firma acta (col F=6)
         if row.acta_fecha_firma:
             cell(6).value = row.acta_fecha_firma
             cell(6).number_format = "DD/MM/YYYY"
 
-        # Campos SI/NO
+        # SI → 1, NO → 0, NA/- → texto
         for campo, col_num in col_map.items():
             val = getattr(row, campo) or ''
             c = cell(col_num)
-            c.value = val
             c.alignment = _align("center")
             if val == 'SI':
-                c.fill = _color(C_SI)
-                c.font = _font(bold=True, color=C_SI_TXT)
+                c.value = 1
+                c.number_format = '0'
             elif val == 'NO':
-                c.fill = _color(C_NO)
-                c.font = _font(bold=True, color=C_NO_TXT)
-            elif val in ('NA', '-'):
+                c.value = 0
+                c.number_format = '0'
+            elif val in ('NA', '-', ''):
+                c.value = val if val else None
                 c.fill = _color(C_NA)
                 c.font = _font(color=C_NA_TXT)
 
@@ -2403,52 +2395,90 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
             cell(20).number_format = '#,##0.00'
             cell(20).alignment = _align("right")
 
-        # Observaciones (col X = 24)
         cell(24).value = row.observaciones or ''
         cell(24).alignment = _align("left")
 
-        # Aplicar borde y fondo alternado a toda la fila
+        # Borde y fondo alternado
         for col_num in range(1, 25):
             c = cell(col_num)
             c.border = brd
-            if bg and c.fill.fgColor.rgb in ("00000000", "00FFFFFF", "FFFFFFFF"):
+            try:
+                rgb = c.fill.fgColor.rgb
+            except Exception:
+                rgb = "00000000"
+            if bg and rgb in ("00000000", "00FFFFFF", "FFFFFFFF"):
                 c.fill = _color(bg)
             if c.alignment.horizontal is None:
                 c.alignment = _align("center")
 
-        ws.row_dimensions[excel_row].height = 15
+        ws.row_dimensions[r_idx].height = 15
+
+    # ── FORMATO CONDICIONAL: 1=verde, 0=rojo ────────────────────────
+    last_data_row = data_first_row + len(filas) - 1
+    siono_range = f"G{data_first_row}:S{last_data_row} U{data_first_row}:W{last_data_row}"
+
+    dxf_1 = DifferentialStyle(
+        fill=PatternFill(bgColor="C6EFCE"),
+        font=Font(bold=True, color="276221")
+    )
+    dxf_0 = DifferentialStyle(
+        fill=PatternFill(bgColor="FFC7CE"),
+        font=Font(bold=True, color="9C0006")
+    )
+    ws.conditional_formatting.add(
+        f"G{data_first_row}:S{last_data_row}",
+        Rule(type="cellIs", operator="equal", formula=["1"], dxf=dxf_1)
+    )
+    ws.conditional_formatting.add(
+        f"G{data_first_row}:S{last_data_row}",
+        Rule(type="cellIs", operator="equal", formula=["0"], dxf=dxf_0)
+    )
+    ws.conditional_formatting.add(
+        f"U{data_first_row}:W{last_data_row}",
+        Rule(type="cellIs", operator="equal", formula=["1"], dxf=dxf_1)
+    )
+    ws.conditional_formatting.add(
+        f"U{data_first_row}:W{last_data_row}",
+        Rule(type="cellIs", operator="equal", formula=["0"], dxf=dxf_0)
+    )
 
     # ── ANCHOS DE COLUMNA ────────────────────────────────────────────
     col_widths = {1:4, 2:22, 3:7, 4:7, 5:11, 6:11,
-                  7:9,8:9,9:9,10:9,11:9,12:9,13:9,14:9,15:9,
-                  16:9,17:9,18:9,19:9,20:12,21:9,22:9,23:9,24:22}
+                  7:7,8:7,9:7,10:7,11:7,12:7,13:7,14:7,15:7,
+                  16:7,17:7,18:7,19:7,20:13,21:7,22:7,23:7,24:22}
     for col_num, width in col_widths.items():
         ws.column_dimensions[get_column_letter(col_num)].width = width
 
     # ── FILA TOTALES ─────────────────────────────────────────────────
-    total_row = len(filas) + 4
-    ws.cell(total_row, 2).value = "PROMEDIO"
-    ws.cell(total_row, 2).font = _font(bold=True)
-    ws.cell(total_row, 3).value = f"=AVERAGE(C4:C{total_row-1})"
+    total_row = last_data_row + 1
+    ws.merge_cells(f"A{total_row}:B{total_row}")
+    ws.cell(total_row, 1).value = "TOTAL / PROMEDIO"
+    ws.cell(total_row, 1).font = _font(bold=True, size=9)
+    ws.cell(total_row, 1).alignment = _align("right")
+    ws.cell(total_row, 3).value = f"=AVERAGE(C{data_first_row}:C{last_data_row})"
     ws.cell(total_row, 3).number_format = "0%"
-    ws.cell(total_row, 4).value = f"=AVERAGE(D4:D{total_row-1})"
+    ws.cell(total_row, 4).value = f"=AVERAGE(D{data_first_row}:D{last_data_row})"
     ws.cell(total_row, 4).number_format = "0.00%"
+    # Total monto pagado (col T=20)
+    ws.cell(total_row, 20).value = f"=SUM(T{data_first_row}:T{last_data_row})"
+    ws.cell(total_row, 20).number_format = '#,##0.00'
+    ws.cell(total_row, 20).alignment = _align("right")
+    ws.cell(total_row, 20).font = _font(bold=True, color="145f2e", size=10)
     for col_num in range(1, 25):
         c = ws.cell(total_row, col_num)
         c.border = brd
         c.fill = _color("D9E1F2")
-        if c.font.bold is None:
-            c.font = _font(bold=True)
-    ws.row_dimensions[total_row].height = 15
+    ws.row_dimensions[total_row].height = 16
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fecha = datetime.now().strftime("%Y%m%d")
+    fecha = datetime.now().strftime("%d.%m.%Y")
+    nombre = f"Seguimiento Liquidacion Comisarias ({fecha}).xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="seguimiento_liquidacion_{fecha}.xlsx"'}
+        headers={"Content-Disposition": f'attachment; filename="{nombre}"'}
     )
 
 

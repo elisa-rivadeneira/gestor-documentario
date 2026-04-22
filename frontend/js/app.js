@@ -3590,6 +3590,23 @@ let seguimientoData = [];
 let celdaEditando = null; // { comisariaId, campo, valorActual }
 let valorCeldaSeleccionado = null;
 
+async function descargarExcelSeguimiento() {
+    try {
+        const res = await fetch('/api/seguimiento/exportar-excel');
+        if (!res.ok) throw new Error('Error al generar el Excel');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const fecha = new Date().toLocaleDateString('es-PE').replace(/\//g, '.');
+        a.href = url;
+        a.download = `Seguimiento Liquidacion Comisarias (${fecha}).xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        mostrarToast('Error al descargar el Excel', 'error');
+    }
+}
+
 function copiarLinkSeguimiento() {
     const url = window.location.origin + '/seguimiento';
     navigator.clipboard.writeText(url).then(() => {

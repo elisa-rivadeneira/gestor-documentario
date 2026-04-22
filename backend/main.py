@@ -2240,8 +2240,7 @@ def _align(horizontal="center", wrap=True):
 
 @app.get("/api/seguimiento/exportar-excel")
 def exportar_seguimiento_excel(db: Session = Depends(get_db)):
-    """Exporta la tabla de seguimiento como Excel con formato similar al original.
-    Valores SI/NO → 1/0 con formato condicional verde/rojo."""
+    """Exporta la tabla de seguimiento como Excel. SI→✔ NO→✘ con formato condicional."""
     from openpyxl.styles.differential import DifferentialStyle
     from openpyxl.formatting.rule import Rule
 
@@ -2252,16 +2251,24 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
     ws.title = "Seguimiento Liquidación"
     ws.sheet_view.showGridLines = False
 
-    C_TITLE   = "1F3864"
-    C_GRP1    = "1F497D"
-    C_GRP2    = "243F60"
-    C_GRP3    = "3A3680"
-    C_GRP4    = "215868"
-    C_GRP5    = "215832"
+    # Paleta gris – mismos tonos que el tema "gris" de la web
+    C_TITLE   = "1E293B"   # slate-800  – barra de título
+    C_GRP     = "334155"   # slate-700  – encabezados de sección
+    C_SUB     = "475569"   # slate-600  – sub-encabezados
     C_HDR_TXT = "FFFFFF"
-    C_NA      = "EDEDED"
-    C_NA_TXT  = "7F7F7F"
-    C_ALT     = "F2F2F2"
+    C_TH_BG   = "F1F5F9"   # slate-100 – filas de encabezado (texto oscuro)
+    C_TH_TXT  = "1E293B"
+    C_ALT     = "F8FAFC"   # slate-50  – filas pares
+    C_NA      = "E2E8F0"   # slate-200
+    C_NA_TXT  = "64748B"   # slate-500
+    # Celdas ✔/✘
+    C_SI_BG   = "DCFCE7"   # green-100
+    C_SI_TXT  = "166534"   # green-800
+    C_NO_BG   = "FEE2E2"   # red-100
+    C_NO_TXT  = "991B1B"   # red-800
+
+    ICO_SI = "✔"
+    ICO_NO = "✘"
 
     brd = _border()
 
@@ -2277,23 +2284,23 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
 
     # ── FILA 2: Encabezados de grupo ────────────────────────────────
     grupos = [
-        ("A2","A3","N°",              None),
-        ("B2","B3","COMISARÍA PNP",  None),
-        ("C2","D2","AVANCE DE EJECUCIÓN", None),
-        ("E2","E3","FECHA FINAL\nEJECUCIÓN CONTRACTUAL", None),
-        ("F2","H2","1. ACTA DE CONFORMIDAD\nDE EJECUCIÓN Y RECEPCIÓN FÍSICA", C_GRP1),
-        ("I2","K2","2. INFORME DE MODIFICACIÓN\nDE PARTIDAS (UGPE)", C_GRP2),
-        ("L2","O2","3. INFORME DE\nAMPLIACIÓN DE PLAZO", C_GRP3),
-        ("P2","T2","4. INFORME DE CULMINACIÓN Y\nENTREGA DE OBRA (DOSSIER)", C_GRP4),
-        ("U2","W2","5. INFORME DE LIQUIDACIÓN\n(FINAL)", C_GRP5),
-        ("X2","X3","OBSERVACIONES", None),
+        ("A2","A3","N°",              C_TITLE),
+        ("B2","B3","COMISARÍA PNP",  C_TITLE),
+        ("C2","D2","AVANCE DE EJECUCIÓN", C_TITLE),
+        ("E2","E3","FECHA FINAL\nEJECUCIÓN CONTRACTUAL", C_TITLE),
+        ("F2","H2","1. ACTA DE CONFORMIDAD\nDE EJECUCIÓN Y RECEPCIÓN FÍSICA", C_GRP),
+        ("I2","K2","2. INFORME DE MODIFICACIÓN\nDE PARTIDAS (UGPE)", C_GRP),
+        ("L2","O2","3. INFORME DE\nAMPLIACIÓN DE PLAZO", C_GRP),
+        ("P2","T2","4. INFORME DE CULMINACIÓN Y\nENTREGA DE OBRA (DOSSIER)", C_GRP),
+        ("U2","W2","5. INFORME DE LIQUIDACIÓN\n(FINAL)", C_GRP),
+        ("X2","X3","OBSERVACIONES", C_TITLE),
     ]
     for start, end, label, color in grupos:
         if start != end:
             ws.merge_cells(f"{start}:{end}")
         cel = ws[start]
         cel.value = label
-        cel.fill = _color(color or C_TITLE)
+        cel.fill = _color(color)
         cel.font = _font(bold=True, color=C_HDR_TXT, size=8)
         cel.alignment = _align("center")
         cel.border = brd
@@ -2306,31 +2313,31 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
     ws.merge_cells("X2:X3")
 
     sub_hdrs = [
-        ("C3", "PROGRAMADO",         None),
-        ("D3", "FÍSICO",             None),
-        ("F3", "FECHA FIRMA\nACTA",  C_GRP1),
-        ("G3", "REVISADA Y\nAPROBADA",   C_GRP1),
-        ("H3", "REMITIDA\nA UGPE",       C_GRP1),
-        ("I3", "PRESENTADO\nAL NE",      C_GRP2),
-        ("J3", "REVISADO Y\nAPROBADO",   C_GRP2),
-        ("K3", "REMITIDO\nA UGPE",       C_GRP2),
-        ("L3", "PRESENTADO\nAL NE",      C_GRP3),
-        ("M3", "REVISADO Y\nAPROBADO",   C_GRP3),
-        ("N3", "ADENDA\nFIRMADA",        C_GRP3),
-        ("O3", "REMITIDO\nA UGPE",       C_GRP3),
-        ("P3", "PRESENTADO\nAL NE",      C_GRP4),
-        ("Q3", "REVISADO Y\nAPROBADO",   C_GRP4),
-        ("R3", "REMITIDO\nA UGPE",       C_GRP4),
-        ("S3", "REMITIDO\nPARA PAGO",    C_GRP4),
-        ("T3", "MONTO\nPAGADO (S/)",     C_GRP4),
-        ("U3", "PRESENTADO\nAL NE",      C_GRP5),
-        ("V3", "REVISADO Y\nAPROBADO",   C_GRP5),
-        ("W3", "REMITIDO\nPARA PAGO",    C_GRP5),
+        ("C3", "PROGRAMADO"),
+        ("D3", "FÍSICO"),
+        ("F3", "FECHA FIRMA\nACTA"),
+        ("G3", "REVISADA Y\nAPROBADA"),
+        ("H3", "REMITIDA\nA UGPE"),
+        ("I3", "PRESENTADO\nAL NE"),
+        ("J3", "REVISADO Y\nAPROBADO"),
+        ("K3", "REMITIDO\nA UGPE"),
+        ("L3", "PRESENTADO\nAL NE"),
+        ("M3", "REVISADO Y\nAPROBADO"),
+        ("N3", "ADENDA\nFIRMADA"),
+        ("O3", "REMITIDO\nA UGPE"),
+        ("P3", "PRESENTADO\nAL NE"),
+        ("Q3", "REVISADO Y\nAPROBADO"),
+        ("R3", "REMITIDO\nA UGPE"),
+        ("S3", "REMITIDO\nPARA PAGO"),
+        ("T3", "MONTO\nPAGADO (S/)"),
+        ("U3", "PRESENTADO\nAL NE"),
+        ("V3", "REVISADO Y\nAPROBADO"),
+        ("W3", "REMITIDO\nPARA PAGO"),
     ]
-    for cell_ref, label, color in sub_hdrs:
+    for cell_ref, label in sub_hdrs:
         c = ws[cell_ref]
         c.value = label
-        c.fill = _color(color or C_TITLE)
+        c.fill = _color(C_SUB)
         c.font = _font(bold=True, color=C_HDR_TXT, size=8)
         c.alignment = _align("center")
         c.border = brd
@@ -2373,19 +2380,21 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
             cell(6).value = row.acta_fecha_firma
             cell(6).number_format = "DD/MM/YYYY"
 
-        # SI → 1, NO → 0, NA/- → texto
+        # SI → ✔ (verde), NO → ✘ (rojo), NA/- → gris
         for campo, col_num in col_map.items():
             val = getattr(row, campo) or ''
             c = cell(col_num)
             c.alignment = _align("center")
             if val == 'SI':
-                c.value = 1
-                c.number_format = '0'
+                c.value = ICO_SI
+                c.fill = _color(C_SI_BG)
+                c.font = _font(bold=True, color=C_SI_TXT, size=11)
             elif val == 'NO':
-                c.value = 0
-                c.number_format = '0'
+                c.value = ICO_NO
+                c.fill = _color(C_NO_BG)
+                c.font = _font(bold=True, color=C_NO_TXT, size=11)
             elif val in ('NA', '-', ''):
-                c.value = val if val else None
+                c.value = '–' if not val else val
                 c.fill = _color(C_NA)
                 c.font = _font(color=C_NA_TXT)
 
@@ -2413,34 +2422,7 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
 
         ws.row_dimensions[r_idx].height = 15
 
-    # ── FORMATO CONDICIONAL: 1=verde, 0=rojo ────────────────────────
     last_data_row = data_first_row + len(filas) - 1
-    siono_range = f"G{data_first_row}:S{last_data_row} U{data_first_row}:W{last_data_row}"
-
-    dxf_1 = DifferentialStyle(
-        fill=PatternFill(bgColor="C6EFCE"),
-        font=Font(bold=True, color="276221")
-    )
-    dxf_0 = DifferentialStyle(
-        fill=PatternFill(bgColor="FFC7CE"),
-        font=Font(bold=True, color="9C0006")
-    )
-    ws.conditional_formatting.add(
-        f"G{data_first_row}:S{last_data_row}",
-        Rule(type="cellIs", operator="equal", formula=["1"], dxf=dxf_1)
-    )
-    ws.conditional_formatting.add(
-        f"G{data_first_row}:S{last_data_row}",
-        Rule(type="cellIs", operator="equal", formula=["0"], dxf=dxf_0)
-    )
-    ws.conditional_formatting.add(
-        f"U{data_first_row}:W{last_data_row}",
-        Rule(type="cellIs", operator="equal", formula=["1"], dxf=dxf_1)
-    )
-    ws.conditional_formatting.add(
-        f"U{data_first_row}:W{last_data_row}",
-        Rule(type="cellIs", operator="equal", formula=["0"], dxf=dxf_0)
-    )
 
     # ── ANCHOS DE COLUMNA ────────────────────────────────────────────
     col_widths = {1:4, 2:22, 3:7, 4:7, 5:11, 6:11,
@@ -2467,7 +2449,7 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
     for col_num in range(1, 25):
         c = ws.cell(total_row, col_num)
         c.border = brd
-        c.fill = _color("D9E1F2")
+        c.fill = _color("E2E8F0")
     ws.row_dimensions[total_row].height = 16
 
     buf = io.BytesIO()

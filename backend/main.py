@@ -2425,7 +2425,7 @@ def exportar_seguimiento_excel(db: Session = Depends(get_db)):
     last_data_row = data_first_row + len(filas) - 1
 
     # ── ANCHOS DE COLUMNA ────────────────────────────────────────────
-    col_widths = {1:4, 2:22, 3:7, 4:7, 5:11, 6:11,
+    col_widths = {1:4, 2:22, 3:7, 4:8.43, 5:11, 6:11,
                   7:7,8:7,9:7,10:7,11:7,12:7,13:7,14:7,15:7,
                   16:7,17:7,18:7,19:7,20:13,21:7,22:7,23:7,24:22}
     for col_num, width in col_widths.items():

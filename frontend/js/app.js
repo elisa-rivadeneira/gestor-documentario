@@ -3572,6 +3572,7 @@ const LABELS_CAMPO = {
     liq_remitido_pago: 'Liquidación: Remitido para pago',
     observaciones: 'Observaciones',
     fecha_fin_contractual: 'Fecha Final de Ejecución Contractual',
+    acta_fecha_firma: 'Fecha Firma Acta',
     avance_fisico: 'Avance Físico (%)',
     dossier_monto_pagado: 'Monto Pagado (S/)',
 };
@@ -3580,7 +3581,7 @@ const LABELS_CAMPO = {
 function tipoCampo(campo) {
     if (CAMPOS_SIONO.has(campo)) return 'siono';
     if (campo === 'observaciones') return 'texto';
-    if (campo === 'fecha_fin_contractual') return 'fecha';
+    if (campo === 'fecha_fin_contractual' || campo === 'acta_fecha_firma') return 'fecha';
     if (campo === 'avance_fisico') return 'numero';
     if (campo === 'dossier_monto_pagado') return 'monto';
     return 'siono';
@@ -3801,7 +3802,7 @@ function renderizarSeguimiento() {
             <td class="border border-gray-200 px-1 py-1.5 text-center text-gray-500">${avanceProg}</td>
             ${tdEdit('avance_fisico', avanceFisHtml, 'text-center')}
             ${tdEdit('fecha_fin_contractual', fechaFin ? `<span class="font-medium">${fechaFin}</span>` : '', 'text-center')}
-            <td class="border border-gray-200 px-1 py-1.5 text-center text-gray-600">${fechaFirma}</td>
+            ${tdEdit('acta_fecha_firma', fechaFirma ? `<span class="font-medium">${fechaFirma}</span>` : '', 'text-center')}
             ${celdasHtml}
             ${tdEdit('observaciones', row.observaciones ? `<span class="text-gray-600">${row.observaciones}</span>` : '', 'text-left')}
             <td class="border border-gray-200 px-1 py-1.5 text-center text-gray-400 text-[10px] leading-tight">${updatedAt}</td>
